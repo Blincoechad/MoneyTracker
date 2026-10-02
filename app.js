@@ -390,10 +390,11 @@ function renderResults(r, base) {
 
   renderHero(r, base);
   renderKpis(r, base);
+  renderThisWeek(r, state);
   renderWeeks(r, state);
   renderExpenseMonthly(r);
-  renderRecovery(r);
-  renderMinimum(r);
+  renderNeeds(r);
+  renderSettingsSummary(r, state);
   renderFlow(r);
   renderBreakdown(r);
   renderExpenseBars(r);
@@ -412,9 +413,7 @@ function renderHero(r, base) {
 
   $("heroRemaining").textContent = signedMoney(r.projectedRemaining);
   $("stickyRemaining").textContent = signedMoney(r.projectedRemaining);
-  $("stickyMinimum").textContent = money(r.minimumWeeklyIncome);
-  $("heroEquation").textContent =
-    `${money(r.projectedIncome)} income − ${money(r.monthlyExpenses)} expenses − ${money(r.monthlySavings)} savings`;
+  $("stickyMinimum").textContent = r.breakEvenPerOpenWeek === null ? "—" : money(r.breakEvenPerOpenWeek);
 
   if (r.isPositive) {
     $("heroMessage").textContent = clean(r.projectedRemaining) === 0
@@ -453,38 +452,18 @@ function setKpi(id, valueText, subText, baseValue, currentValue) {
 
 function renderKpis(r, base) {
   const b = base ?? {};
-  setKpi("kpiExpectedWeekly", money(r.expectedWeekly), "Your baseline", b.expectedWeekly, r.expectedWeekly);
+  const vsPlan = r.projectedIncome - r.baselineMonthlyIncome;
   setKpi(
     "kpiIncome",
     money(r.projectedIncome),
-    clean(r.projectedIncome - r.baselineMonthlyIncome) === 0
-      ? `${formatWeeks(r.weeksInMonth)} at expected`
-      : `Plan was ${money(r.baselineMonthlyIncome)} (${signedMoney(r.projectedIncome - r.baselineMonthlyIncome)})`,
+    clean(vsPlan) === 0
+      ? `${r.weeks.length} weeks × ${money(r.expectedWeekly)}`
+      : `Plan was ${money(r.baselineMonthlyIncome)} (${signedMoney(vsPlan)})`,
     b.projectedIncome,
     r.projectedIncome
   );
-  setKpi("kpiExpenses", money(r.monthlyExpenses), `${r.expenseLines.length} item${r.expenseLines.length === 1 ? "" : "s"}, monthly equivalent`, b.monthlyExpenses, r.monthlyExpenses);
+  setKpi("kpiExpenses", money(r.monthlyExpenses), `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} this month`, b.monthlyExpenses, r.monthlyExpenses);
   setKpi("kpiSavings", money(r.monthlySavings), "Set aside, not spent", b.monthlySavings, r.monthlySavings);
-
-  setKpi(
-    "kpiMinimum",
-    money(r.minimumWeeklyIncome),
-    r.weeklyBuffer >= 0 ? `${signedMoney(r.weeklyBuffer)}/wk buffer` : `${signedMoney(r.weeklyBuffer)}/wk short`,
-    b.minimumWeeklyIncome,
-    r.minimumWeeklyIncome
-  );
-  $("kpiMinimumSub").classList.toggle("text-bad", r.weeklyBuffer < 0 && !base);
-
-  let recoverySub;
-  if (r.deficit > 0) {
-    recoverySub = r.openWeekCount > 0 ? `${money(r.extraPerOpenWeek)} extra/wk over ${r.openWeekCount} wk` : "No weeks left this month";
-  } else if (r.shortfallVsPlan > 0.005) {
-    recoverySub = `${money(r.shortfallVsPlan)} behind plan, still positive`;
-  } else {
-    recoverySub = "Month stays positive";
-  }
-  setKpi("kpiRecovery", money(r.deficit), recoverySub, b.deficit, r.deficit);
-  $("kpiRecovery").classList.toggle("text-bad", r.deficit > 0);
 }
 
 function renderWeeks(r, state) {
@@ -537,36 +516,77 @@ function renderExpenseMonthly(r) {
   $("expenseTotal").textContent = money(r.monthlyExpenses);
 }
 
-function renderRecovery(r) {
-  const weekWord = (n) => `week${n === 1 ? "" : "s"}`;
-  const parts = [];
+// The most recent payday on or before today: the paycheck you just got.
+// Used by the This week card and by the Friday reminder link.
+function latestPaydayWeek(weeks) {
+  const today = new Date().getDate();
+  return weeks.filter((week) => week.startDay <= today).pop() ?? null;
+}
 
-  if (r.openWeekCount === 0) {
-    parts.push(`<p class="callout ${r.isPositive ? "is-good" : "is-bad"}">Every week this month is done or filled in, so there's nothing left to recover. The month finishes at <strong>${signedMoney(r.projectedRemaining)}</strong>.</p>`);
-  } else {
-    // Part A: compared with your plan
-    if (r.shortfallVsPlan > 0.005) {
-      parts.push(`<p>You are currently <strong class="text-bad">${money(r.shortfallVsPlan)} below</strong> your expected income. To stay on plan, make approximately:</p>`);
-      parts.push(`<p class="recovery-big">${money(r.onPlanPerOpenWeek)}<small> / week for the remaining ${r.openWeekCount} ${weekWord(r.openWeekCount)}</small></p>`);
-    } else if (r.shortfallVsPlan < -0.005) {
-      parts.push(`<p>You are <strong class="text-good">${money(-r.shortfallVsPlan)} above</strong> your expected income so far. To stay on plan, the remaining weeks only need:</p>`);
-      parts.push(`<p class="recovery-big">${money(Math.max(0, r.onPlanPerOpenWeek))}<small> / week for ${r.openWeekCount} ${weekWord(r.openWeekCount)}</small></p>`);
-    } else {
-      parts.push(`<p>You're right on plan so far. Keep making your expected amount:</p>`);
-      parts.push(`<p class="recovery-big">${money(r.expectedWeekly)}<small> / week for ${r.openWeekCount} ${weekWord(r.openWeekCount)}</small></p>`);
-    }
+function renderThisWeek(r, state) {
+  const latest = latestPaydayWeek(r.weeks);
+  const week = latest ?? r.weeks[0]; // before this month's first payday, show the first one
+  const label = weekLabel(week);
+  $("thisWeekWhen").textContent = `${label.name} of ${r.weeks.length} · ${label.dates}${latest ? "" : " (upcoming)"}`;
 
-    // Part B: the hard floor to avoid going negative
-    const floor = r.breakEvenPerOpenWeek;
-    if (clean(floor) === 0) {
-      parts.push(`<p class="callout is-good">Income already received covers this month's bills and savings. Anything you make from here is extra.</p>`);
-    } else if (floor > r.expectedWeekly + 0.005) {
-      parts.push(`<p class="callout is-bad">To avoid finishing negative, you need at least <strong>${money(floor)}/week</strong>. That's ${money(floor - r.expectedWeekly)} more than your usual week.</p>`);
-    } else {
-      parts.push(`<p class="callout">To avoid finishing negative, you need at least <strong>${money(floor)}/week</strong> from here. That's ${money(r.expectedWeekly - floor)} under your usual week, so you have room.</p>`);
-    }
+  const input = $("thisWeekPay");
+  if (input.dataset.weekKey !== week.key || document.activeElement !== input) {
+    input.dataset.weekKey = week.key;
+    input.value = state.actuals[week.key] ?? "";
+    validateAmount(input);
   }
-  $("recoveryHeadline").innerHTML = parts.join("");
+  input.placeholder = r.expectedWeekly.toFixed(2);
+
+  const status = week.status === "actual"
+    ? `${signedMoney(week.difference)} vs your usual week`
+    : `Leave it blank and it counts as ${money(r.expectedWeekly)}`;
+  $("thisWeekResult").innerHTML = `${status} · Left this month: <strong class="${r.isPositive ? "text-good" : "text-bad"}">${signedMoney(r.projectedRemaining)}</strong>`;
+}
+
+function renderNeeds(r) {
+  const weekWord = (n) => `week${n === 1 ? "" : "s"}`;
+  const perWeek = (amount) => (amount === null ? "—" : `${money(Math.max(0, amount))}<small>/wk</small>`);
+  const breakEven = r.breakEvenPerOpenWeek;
+
+  $("needBreakEven").innerHTML = perWeek(breakEven);
+  $("needBreakEven").className = breakEven !== null && breakEven > r.expectedWeekly + 0.005 ? "text-bad" : "";
+  $("needOnPlan").innerHTML = perWeek(r.onPlanPerOpenWeek);
+  $("needUsual").innerHTML = perWeek(r.expectedWeekly);
+  $("needWeeksLeft").textContent = r.openWeekCount > 0
+    ? `For the ${r.openWeekCount} ${weekWord(r.openWeekCount)} left this month.`
+    : "No weeks left this month.";
+
+  // Meter: your usual week, with a line where break-even sits.
+  $("needMeter").hidden = breakEven === null;
+  if (breakEven !== null) {
+    const scale = Math.max(r.expectedWeekly, breakEven, 1) * 1.15;
+    $("needMeterFill").style.width = `${(r.expectedWeekly / scale) * 100}%`;
+    $("needMeterFill").classList.toggle("is-bad", breakEven > r.expectedWeekly + 0.005);
+    $("needMeterMarker").style.left = `calc(${(breakEven / scale) * 100}% - 1px)`;
+  }
+
+  // One plain sentence about where you stand.
+  let tone = "";
+  let message;
+  if (r.openWeekCount === 0) {
+    tone = r.isPositive ? "is-good" : "is-bad";
+    message = `Every week this month is done or filled in. The month finishes at <strong>${signedMoney(r.projectedRemaining)}</strong>.`;
+  } else if (clean(breakEven) === 0) {
+    tone = "is-good";
+    message = "Pay you've already received covers this month's bills and savings. Anything from here is extra.";
+  } else if (breakEven > r.expectedWeekly + 0.005) {
+    tone = "is-bad";
+    message = `Your usual week isn't enough this month. You need about <strong>${money(breakEven - r.expectedWeekly)} more each week</strong> to avoid finishing negative.`;
+  } else if (r.shortfallVsPlan > 0.005) {
+    message = `You're <strong>${money(r.shortfallVsPlan)} behind plan</strong>, but your usual week still covers the ${money(breakEven)} you need, with ${money(r.expectedWeekly - breakEven)} to spare.`;
+  } else if (r.shortfallVsPlan < -0.005) {
+    tone = "is-good";
+    message = `You're <strong>${money(-r.shortfallVsPlan)} ahead of plan</strong>. Your usual week covers the ${money(breakEven)} you need, with ${money(r.expectedWeekly - breakEven)} to spare.`;
+  } else {
+    tone = "is-good";
+    message = `You're on plan. Your usual week covers the ${money(breakEven)} you need, with ${money(r.expectedWeekly - breakEven)} to spare.`;
+  }
+  $("needMessage").innerHTML = `<p class="callout ${tone}">${message}</p>`;
 
   const currentText = r.currentWeekIndex >= r.weeks.length ? "Month is over" : `${weekLabel(r.weeks[r.currentWeekIndex]).name} of ${r.weeks.length}`;
   const facts = [
@@ -578,18 +598,22 @@ function renderRecovery(r) {
     ["Still required to reach $0", money(r.stillRequired)],
   ];
   $("recoveryFacts").innerHTML = facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("");
+
+  $("needExplain").innerHTML = r.openWeekCount === 0 ? "" : `
+    <p><strong>Break even:</strong> <span class="formula">${money(r.stillRequired)} still required ÷ ${r.openWeekCount} ${weekWord(r.openWeekCount)} = ${money(breakEven)}/wk</span></p>
+    <p><strong>Stay on plan:</strong> <span class="formula">${money(r.expectedWeekly)} usual ${r.shortfallVsPlan >= 0 ? "+" : "−"} ${money(Math.abs(r.shortfallVsPlan))} ${r.shortfallVsPlan >= 0 ? "behind" : "ahead"} ÷ ${r.openWeekCount} = ${money(r.onPlanPerOpenWeek)}/wk</span></p>`;
 }
 
-function renderMinimum(r) {
-  $("minNeeded").textContent = `${money(r.minimumWeeklyIncome)}`;
-  $("minExpected").textContent = `${money(r.expectedWeekly)}`;
-  $("minBuffer").textContent = `${signedMoney(r.weeklyBuffer)}`;
-  $("minBuffer").className = r.weeklyBuffer >= 0 ? "text-good" : "text-bad";
-
-  const scale = Math.max(r.expectedWeekly, r.minimumWeeklyIncome, 1) * 1.15;
-  $("minMeterFill").style.width = `${(r.expectedWeekly / scale) * 100}%`;
-  $("minMeterFill").classList.toggle("is-bad", r.weeklyBuffer < 0);
-  $("minMeterMarker").style.left = `calc(${(r.minimumWeeklyIncome / scale) * 100}% - 1px)`;
+// One line under "Budget settings" so you can see your setup without opening it.
+function renderSettingsSummary(r, state) {
+  const savings = parseMoney(state.savings.amount).value ?? 0;
+  const parts = [
+    `${money(r.expectedWeekly)}/week`,
+    `paid ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}`,
+    `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} (${money(r.monthlyExpenses)})`,
+    savings > 0 ? `saving ${money(savings)}/${state.savings.frequency === "weekly" ? "week" : "month"}` : "no savings goal",
+  ];
+  $("settingsSummary").textContent = parts.join(" · ");
 }
 
 function renderFlow(r) {
@@ -681,6 +705,7 @@ function renderExplanations(r, state) {
 
   const divisor = `÷ ${r.weeks.length} weeks`;
   $("minimumExplain").innerHTML = `
+    <p><strong>If every week paid the same</strong> (the whole month, not just what's left):</p>
     <p class="formula">${money(r.monthlyExpenses)} expenses + ${money(r.monthlySavings)} savings = ${money(r.requiredMonthlyIncome)} needed per month</p>
     <p class="formula">${money(r.requiredMonthlyIncome)} ${divisor} = ${money(r.minimumWeeklyIncome)} per week</p>
     <p>Buffer = what you expect − what you need: <span class="formula">${weekly} − ${money(r.minimumWeeklyIncome)} = ${signedMoney(r.weeklyBuffer)}</span></p>`;
@@ -924,6 +949,12 @@ function handleChange(event) {
     if (text === "") delete state.actuals[el.dataset.weekKey];
     else state.actuals[el.dataset.weekKey] = el.value;
     validateAmount(el);
+    // The This week card and the week's row are two boxes for the same week; keep them matching.
+    document.querySelectorAll(`[data-week-key="${el.dataset.weekKey}"]`).forEach((other) => {
+      if (other === el) return;
+      other.value = el.value;
+      validateAmount(other);
+    });
   } else if (el.dataset.expenseId) {
     const expense = state.expenses.find((item) => item.id === el.dataset.expenseId);
     if (!expense) return;
@@ -971,6 +1002,7 @@ $("whatIfToggle").addEventListener("click", () => {
     scenario = null;
   } else {
     scenario = structuredClone(baseline);
+    $("settingsDetails").open = true; // what-ifs are mostly changes to settings
   }
   renderInputs();
 });
@@ -990,6 +1022,7 @@ $("discardScenario").addEventListener("click", () => {
 $("startBlank").addEventListener("click", () => {
   baseline = createBlankState();
   scenario = null;
+  $("settingsDetails").open = true;
   renderInputs();
   $("expectedWeekly").focus();
 });
@@ -1138,6 +1171,8 @@ if ("IntersectionObserver" in window) {
 }
 
 /* ---------- Start ---------- */
+// Budget settings start folded once you're set up; open while setting up or using the example.
+$("settingsDetails").open = baseline.isExample || moneyOrZero(baseline.expectedWeekly) === 0;
 archiveClosedMonth();
 renderInputs(); // also saves, so the cleared month is stored and can't be archived twice
 renderHistory();
@@ -1150,8 +1185,7 @@ renderHistory();
   history.replaceState(null, "", location.pathname); // a reload won't enter it twice
 
   const { value } = parseMoney(params.get("pay"));
-  const today = new Date().getDate();
-  const week = calculate(baseline).weeks.filter((item) => item.startDay <= today).pop();
+  const week = latestPaydayWeek(calculate(baseline).weeks);
   if (value === null || !week) {
     monthNoticeText = "The pay from your reminder couldn't be saved. Enter it in the week below.";
     renderBanners();

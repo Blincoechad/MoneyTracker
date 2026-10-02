@@ -39,7 +39,7 @@
         <strong id="stickyRemaining">$0.00</strong>
       </span>
       <span class="sticky-figure">
-        <span class="sticky-label">Min / week</span>
+        <span class="sticky-label">Break even / wk</span>
         <strong id="stickyMinimum">$0.00</strong>
       </span>
     </div>
@@ -113,96 +113,47 @@
           </div>
           <p id="heroRemaining" class="hero-number">$0.00</p>
           <p id="heroDelta" class="hero-delta" hidden></p>
-          <p id="heroEquation" class="equation"></p>
           <p id="heroMessage" class="hero-message"></p>
         </div>
 
         <dl class="kpis">
           <div class="kpi">
-            <dt>Expected weekly income</dt>
-            <dd id="kpiExpectedWeekly">$0.00</dd>
-            <p class="kpi-sub" id="kpiExpectedWeeklySub">Your baseline</p>
-          </div>
-          <div class="kpi">
-            <dt>Projected monthly income</dt>
+            <dt>Income this month</dt>
             <dd id="kpiIncome">$0.00</dd>
             <p class="kpi-sub" id="kpiIncomeSub"></p>
           </div>
           <div class="kpi">
-            <dt>Monthly expenses</dt>
+            <dt><span class="kpi-op" aria-hidden="true">−</span> Bills &amp; expenses</dt>
             <dd id="kpiExpenses">$0.00</dd>
             <p class="kpi-sub" id="kpiExpensesSub"></p>
           </div>
           <div class="kpi">
-            <dt>Planned savings</dt>
+            <dt><span class="kpi-op" aria-hidden="true">−</span> Savings</dt>
             <dd id="kpiSavings">$0.00</dd>
             <p class="kpi-sub" id="kpiSavingsSub"></p>
-          </div>
-          <div class="kpi">
-            <dt>Minimum weekly income needed</dt>
-            <dd id="kpiMinimum">$0.00</dd>
-            <p class="kpi-sub" id="kpiMinimumSub"></p>
-          </div>
-          <div class="kpi">
-            <dt>Recovery needed this month</dt>
-            <dd id="kpiRecovery">$0.00</dd>
-            <p class="kpi-sub" id="kpiRecoverySub"></p>
           </div>
         </dl>
       </section>
 
+      <!-- ===================== THIS WEEK: the one thing to do each Friday ===================== -->
+      <section class="panel this-week" id="thisWeek" aria-labelledby="thisWeekHeading">
+        <div>
+          <p class="eyebrow" id="thisWeekWhen"></p>
+          <h2 id="thisWeekHeading">How much did you make this week?</h2>
+        </div>
+        <div class="this-week-row">
+          <div class="money-input this-week-input">
+            <span aria-hidden="true">$</span>
+            <input type="text" inputmode="decimal" autocomplete="off" id="thisWeekPay" aria-labelledby="thisWeekHeading" />
+          </div>
+          <p class="this-week-result" id="thisWeekResult"></p>
+        </div>
+        <p class="field-error" id="thisWeekPay-error" role="alert"></p>
+      </section>
+
       <div class="layout">
-        <!-- ===================== LEFT: everything you type ===================== -->
+        <!-- ===================== LEFT: your weeks and your settings ===================== -->
         <div class="column">
-          <section class="panel" aria-labelledby="incomeHeading">
-            <h2 id="incomeHeading">Income</h2>
-
-            <div class="field">
-              <label for="expectedWeekly">Expected weekly take-home</label>
-              <div class="money-input">
-                <span aria-hidden="true">$</span>
-                <input
-                  id="expectedWeekly"
-                  data-field="expectedWeekly"
-                  type="text"
-                  inputmode="decimal"
-                  autocomplete="off"
-                  placeholder="0.00"
-                />
-              </div>
-              <p class="field-error" id="expectedWeeklyError" role="alert"></p>
-              <p class="hint">
-                Your normal week. Every week you haven't filled in below uses
-                this amount.
-              </p>
-            </div>
-
-            <div class="field-row">
-              <div class="field">
-                <label for="paydayWeekday">Payday</label>
-                <select id="paydayWeekday">
-                  <option value="0">Sunday</option>
-                  <option value="1">Monday</option>
-                  <option value="2">Tuesday</option>
-                  <option value="3">Wednesday</option>
-                  <option value="4">Thursday</option>
-                  <option value="5">Friday</option>
-                  <option value="6">Saturday</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="currentWeek">Current week</label>
-                <select id="currentWeek"></select>
-              </div>
-            </div>
-            <p class="hint" id="weekCountHint"></p>
-
-            <details class="explain">
-              <summary>How monthly income is calculated</summary>
-              <div id="incomeExplain"></div>
-            </details>
-          </section>
-
           <section class="panel" aria-labelledby="weeksHeading">
             <div class="panel-head">
               <h2 id="weeksHeading">Weeks this month</h2>
@@ -228,110 +179,172 @@
             <div id="weekList" class="week-list"></div>
           </section>
 
-          <section class="panel" aria-labelledby="expensesHeading">
-            <div class="panel-head">
-              <h2 id="expensesHeading">Bills &amp; expenses</h2>
-              <p class="panel-total">
-                <span id="expenseTotal">$0.00</span>
-                / month
-              </p>
-            </div>
-            <div class="expense-header" aria-hidden="true">
-              <span>Name</span>
-              <span>Amount</span>
-              <span>How often</span>
-              <span>Per month</span>
-              <span></span>
-            </div>
-            <div id="expenseList" class="expense-list"></div>
-            <p id="expenseEmpty" class="empty" hidden>
-              No expenses yet. Add your rent, phone, gas, food, and anything
-              else you pay.
-            </p>
-            <button
-              type="button"
-              id="addExpense"
-              class="button button-outline add-button"
-            >
-              + Add expense
-            </button>
-          </section>
+          <section class="panel settings" aria-labelledby="settingsHeading">
+            <details id="settingsDetails">
+              <summary class="settings-summary">
+                <span>
+                  <h2 id="settingsHeading">Budget settings</h2>
+                  <span class="hint" id="settingsSummary"></span>
+                </span>
+                <span class="settings-toggle" aria-hidden="true"></span>
+              </summary>
+              <div class="settings-body">
+                <section class="settings-section" aria-labelledby="incomeHeading">
+                  <h3 id="incomeHeading">Income</h3>
 
-          <section class="panel" aria-labelledby="savingsHeading">
-            <h2 id="savingsHeading">Savings goal</h2>
-            <div class="field-row">
-              <div class="field">
-                <label for="savingsAmount">Amount to save</label>
-                <div class="money-input">
-                  <span aria-hidden="true">$</span>
-                  <input
-                    id="savingsAmount"
-                    data-field="savingsAmount"
-                    type="text"
-                    inputmode="decimal"
-                    autocomplete="off"
-                    placeholder="0.00"
-                  />
-                </div>
-                <p class="field-error" id="savingsAmountError" role="alert"></p>
+                  <div class="field">
+                    <label for="expectedWeekly">Expected weekly take-home</label>
+                    <div class="money-input">
+                      <span aria-hidden="true">$</span>
+                      <input
+                        id="expectedWeekly"
+                        data-field="expectedWeekly"
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <p class="field-error" id="expectedWeeklyError" role="alert"></p>
+                    <p class="hint">
+                      Your normal week. Every week you haven't filled in below uses
+                      this amount.
+                    </p>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="paydayWeekday">Payday</label>
+                      <select id="paydayWeekday">
+                        <option value="0">Sunday</option>
+                        <option value="1">Monday</option>
+                        <option value="2">Tuesday</option>
+                        <option value="3">Wednesday</option>
+                        <option value="4">Thursday</option>
+                        <option value="5">Friday</option>
+                        <option value="6">Saturday</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="currentWeek">Current week</label>
+                      <select id="currentWeek"></select>
+                    </div>
+                  </div>
+                  <p class="hint" id="weekCountHint"></p>
+
+                  <details class="explain">
+                    <summary>How monthly income is calculated</summary>
+                    <div id="incomeExplain"></div>
+                  </details>
+                </section>
+
+                <section class="settings-section" aria-labelledby="expensesHeading">
+                  <div class="panel-head">
+                    <h3 id="expensesHeading">Bills &amp; expenses</h3>
+                    <p class="panel-total">
+                      <span id="expenseTotal">$0.00</span>
+                      / month
+                    </p>
+                  </div>
+                  <div class="expense-header" aria-hidden="true">
+                    <span>Name</span>
+                    <span>Amount</span>
+                    <span>How often</span>
+                    <span>Per month</span>
+                    <span></span>
+                  </div>
+                  <div id="expenseList" class="expense-list"></div>
+                  <p id="expenseEmpty" class="empty" hidden>
+                    No expenses yet. Add your rent, phone, gas, food, and anything
+                    else you pay.
+                  </p>
+                  <button
+                    type="button"
+                    id="addExpense"
+                    class="button button-outline add-button"
+                  >
+                    + Add expense
+                  </button>
+                </section>
+
+                <section class="settings-section" aria-labelledby="savingsHeading">
+                  <h3 id="savingsHeading">Savings goal</h3>
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="savingsAmount">Amount to save</label>
+                      <div class="money-input">
+                        <span aria-hidden="true">$</span>
+                        <input
+                          id="savingsAmount"
+                          data-field="savingsAmount"
+                          type="text"
+                          inputmode="decimal"
+                          autocomplete="off"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <p class="field-error" id="savingsAmountError" role="alert"></p>
+                    </div>
+                    <fieldset class="field">
+                      <legend>Every</legend>
+                      <div class="segmented segmented-compact">
+                        <input
+                          type="radio"
+                          name="savingsFrequency"
+                          id="savingsWeekly"
+                          value="weekly"
+                        />
+                        <label for="savingsWeekly">Week</label>
+                        <input
+                          type="radio"
+                          name="savingsFrequency"
+                          id="savingsMonthly"
+                          value="monthly"
+                        />
+                        <label for="savingsMonthly">Month</label>
+                      </div>
+                    </fieldset>
+                  </div>
+                  <p class="hint" id="savingsExplain"></p>
+                </section>
               </div>
-              <fieldset class="field">
-                <legend>Every</legend>
-                <div class="segmented segmented-compact">
-                  <input
-                    type="radio"
-                    name="savingsFrequency"
-                    id="savingsWeekly"
-                    value="weekly"
-                  />
-                  <label for="savingsWeekly">Week</label>
-                  <input
-                    type="radio"
-                    name="savingsFrequency"
-                    id="savingsMonthly"
-                    value="monthly"
-                  />
-                  <label for="savingsMonthly">Month</label>
-                </div>
-              </fieldset>
-            </div>
-            <p class="hint" id="savingsExplain"></p>
+            </details>
           </section>
         </div>
 
         <!-- ===================== RIGHT: what it means ===================== -->
         <div class="column">
-          <section class="panel" aria-labelledby="recoveryHeading">
-            <h2 id="recoveryHeading">Recovery</h2>
-            <div id="recoveryHeadline" class="recovery-headline"></div>
-            <dl id="recoveryFacts" class="facts"></dl>
-          </section>
-
-          <section class="panel" aria-labelledby="minimumHeading">
-            <h2 id="minimumHeading">Minimum weekly income</h2>
+          <section class="panel" aria-labelledby="needHeading">
+            <h2 id="needHeading">What you need each week</h2>
             <dl class="trio">
               <div>
-                <dt>Needed to break even</dt>
-                <dd id="minNeeded">$0.00</dd>
+                <dt>To break even</dt>
+                <dd id="needBreakEven">$0.00</dd>
               </div>
               <div>
-                <dt>You expect</dt>
-                <dd id="minExpected">$0.00</dd>
+                <dt>To stay on plan</dt>
+                <dd id="needOnPlan">$0.00</dd>
               </div>
               <div>
-                <dt>Weekly buffer</dt>
-                <dd id="minBuffer">$0.00</dd>
+                <dt>Your usual week</dt>
+                <dd id="needUsual">$0.00</dd>
               </div>
             </dl>
-            <div class="meter" id="minMeter" aria-hidden="true">
-              <div class="meter-fill" id="minMeterFill"></div>
-              <div class="meter-marker" id="minMeterMarker">
-                <span>Minimum</span>
+            <p class="hint" id="needWeeksLeft"></p>
+            <div class="meter" id="needMeter" aria-hidden="true">
+              <div class="meter-fill" id="needMeterFill"></div>
+              <div class="meter-marker" id="needMeterMarker">
+                <span>Break even</span>
               </div>
             </div>
+            <div id="needMessage"></div>
             <details class="explain">
-              <summary>How the minimum is calculated</summary>
-              <div id="minimumExplain"></div>
+              <summary>How this is calculated</summary>
+              <div>
+                <dl id="recoveryFacts" class="facts"></dl>
+                <div id="needExplain"></div>
+                <div id="minimumExplain"></div>
+              </div>
             </details>
           </section>
 
@@ -406,8 +419,8 @@
               for every other week.
             </li>
             <li>
-              Recovery is only spread across weeks that are still ahead of you.
-              Past weeks left blank are assumed to have paid your expected
+              "What you need each week" only counts the weeks still ahead of
+              you. Past weeks left blank are assumed to have paid your usual
               amount.
             </li>
             <li>
