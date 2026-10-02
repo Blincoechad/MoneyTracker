@@ -272,7 +272,7 @@ p { margin: 0; }
 .field-error { font-size: 0.8rem; color: var(--bad); min-height: 0; }
 .field-error:empty { display: none; }
 
-input[type="text"], select {
+input[type="text"], input[type="date"], select {
   font: inherit;
   color: var(--ink);
   background: var(--surface-2);
@@ -282,7 +282,7 @@ input[type="text"], select {
   width: 100%;
   min-width: 0;
 }
-input[type="text"]:hover, select:hover { border-color: var(--muted); }
+input[type="text"]:hover, input[type="date"]:hover, select:hover { border-color: var(--muted); }
 input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-soft); }
 
 .money-input { position: relative; }
@@ -363,12 +363,13 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 /* ---------- Expense rows ---------- */
 .expense-header, .expense-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(76px, 0.8fr) 36px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(70px, 0.7fr) 36px;
   gap: 8px;
   align-items: center;
 }
 .expense-header { font-size: 0.72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
-.expense-header span:nth-child(4) { text-align: right; }
+.expense-header span:nth-child(5) { text-align: right; }
+.expense-due-text { font-size: 0.82rem; color: var(--muted); }
 .expense-list { display: grid; gap: 8px; }
 .expense-row .field-error { grid-column: 1 / -1; }
 .expense-monthly { text-align: right; font-family: var(--font-num); font-size: 0.86rem; color: var(--muted); }
@@ -490,6 +491,7 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
   }
   .expense-row .expense-name { grid-column: 1 / 3; }
   .expense-row .remove-button { grid-column: 3; grid-row: 1; }
+  .expense-row .expense-due { grid-column: 1 / 3; }
   .expense-row .expense-monthly { grid-column: 1 / -1; text-align: left; }
   .facts { grid-template-columns: minmax(0, 1fr); }
 }
@@ -520,10 +522,9 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 /* ---------- This week ---------- */
 .this-week { border-left: 5px solid var(--accent); }
 .this-week h2 { font-size: 1.15rem; }
-.this-week-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.this-week-input { flex: 0 1 220px; }
+.this-week-input { max-width: 260px; }
 .this-week-input input { font-size: 1.3rem; font-weight: 600; }
-.this-week-result { font-size: 0.92rem; color: var(--muted); flex: 1 1 240px; }
+.this-week-result { font-size: 0.92rem; color: var(--muted); }
 .this-week-result strong { color: var(--ink); font-family: var(--font-num); }
 
 /* ---------- What you need each week ---------- */
@@ -541,3 +542,54 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 .settings-section { display: grid; gap: 14px; padding-top: 16px; border-top: 1px solid var(--line); min-width: 0; }
 .settings-section h3 { font-size: 0.95rem; font-weight: 700; }
 .is-whatif .settings { border-color: var(--whatif); }
+
+/* ---------- Paychecks & bills ---------- */
+.paychecks > .panel-head { align-items: baseline; }
+.paycheck-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; align-items: start; }
+.paycheck { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); min-width: 0; }
+.paycheck.is-current { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.paycheck.is-short { border-color: var(--bad); }
+.paycheck-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.paycheck .week-status { margin-top: 0; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); white-space: nowrap; }
+.week-status[data-status="current"] { color: var(--accent); background: var(--accent-soft); }
+.paycheck-diff { font-size: 0.8rem; color: var(--muted); }
+.paycheck-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.paycheck-totals { margin: 0; padding-top: 8px; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+.paycheck-totals > div { display: flex; justify-content: space-between; gap: 8px; font-size: 0.8rem; }
+.paycheck-totals dt { color: var(--muted); }
+.paycheck-totals dd { margin: 0; font-family: var(--font-num); font-weight: 600; }
+.paycheck-note { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--bad-soft); font-size: 0.8rem; }
+.paycheck-note[hidden] { display: none; }
+
+.bill-list { display: grid; gap: 4px; }
+.bill-empty { font-size: 0.82rem; color: var(--muted); padding: 6px 0; }
+.bill-check {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 8px;
+  font: inherit; color: var(--ink); text-align: left; cursor: pointer;
+  background: var(--surface-2); border: 1px solid transparent; border-radius: 8px;
+}
+.bill-check:hover { border-color: var(--line); }
+.bill-check.is-paid { background: var(--good-soft); }
+.bill-box {
+  flex: none; width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--muted);
+  display: grid; place-items: center; color: var(--accent-ink);
+}
+.bill-check.is-paid .bill-box { background: var(--good); border-color: var(--good); }
+.bill-text { display: grid; flex: 1; min-width: 0; }
+.bill-name { font-size: 0.88rem; font-weight: 600; overflow-wrap: break-word; hyphens: auto; }
+.bill-check.is-paid .bill-name { text-decoration: line-through; color: var(--muted); }
+.bill-check.is-savings .bill-name::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--savings); margin-right: 6px; vertical-align: 1px; }
+.bill-due { font-size: 0.74rem; color: var(--muted); }
+.bill-due.is-late { color: var(--bad); font-weight: 600; }
+.bill-amount { font-family: var(--font-num); font-size: 0.84rem; font-weight: 600; white-space: nowrap; }
+
+/* This week: pay on the left, its bills on the right */
+.this-week { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); column-gap: 28px; align-items: start; }
+.this-week-main { display: grid; gap: 10px; }
+.this-week-bills { display: grid; gap: 8px; }
+.this-week-bills h3 { font-size: 0.95rem; font-weight: 700; }
+.this-week-spend { font-size: 0.9rem; padding-top: 8px; border-top: 1px solid var(--line); }
+.this-week-spend strong { font-family: var(--font-num); }
+@media (max-width: 760px) {
+  .this-week { grid-template-columns: minmax(0, 1fr); row-gap: 16px; }
+}

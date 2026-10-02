@@ -137,47 +137,74 @@
 
       <!-- ===================== THIS WEEK: the one thing to do each Friday ===================== -->
       <section class="panel this-week" id="thisWeek" aria-labelledby="thisWeekHeading">
-        <div>
-          <p class="eyebrow" id="thisWeekWhen"></p>
-          <h2 id="thisWeekHeading">How much did you make this week?</h2>
-        </div>
-        <div class="this-week-row">
+        <div class="this-week-main">
+          <div>
+            <p class="eyebrow" id="thisWeekWhen"></p>
+            <h2 id="thisWeekHeading">How much did you make this week?</h2>
+          </div>
           <div class="money-input this-week-input">
             <span aria-hidden="true">$</span>
             <input type="text" inputmode="decimal" autocomplete="off" id="thisWeekPay" aria-labelledby="thisWeekHeading" />
           </div>
+          <p class="field-error" id="thisWeekPay-error" role="alert"></p>
           <p class="this-week-result" id="thisWeekResult"></p>
         </div>
-        <p class="field-error" id="thisWeekPay-error" role="alert"></p>
+        <div class="this-week-bills">
+          <div class="panel-head">
+            <h3>This paycheck pays for</h3>
+            <span class="hint" id="thisWeekProgress"></span>
+          </div>
+          <div id="thisWeekBills" class="bill-list"></div>
+          <p class="this-week-spend" id="thisWeekSpend"></p>
+        </div>
+      </section>
+
+      <!-- ===================== PAYCHECKS: each week's pay and the bills it covers ===================== -->
+      <section class="panel paychecks" aria-labelledby="weeksHeading">
+        <div class="panel-head">
+          <h2 id="weeksHeading">Paychecks this month</h2>
+          <p class="hint">Each paycheck pays the bills due before the next one. Tap a bill to mark it paid.</p>
+        </div>
+        <div id="weekList" class="paycheck-list"></div>
       </section>
 
       <div class="layout">
-        <!-- ===================== LEFT: your weeks and your settings ===================== -->
+        <!-- ===================== LEFT: what it means, and your settings ===================== -->
         <div class="column">
-          <section class="panel" aria-labelledby="weeksHeading">
-            <div class="panel-head">
-              <h2 id="weeksHeading">Weeks this month</h2>
-              <ul class="legend" aria-label="Legend">
-                <li>
-                  <span class="swatch swatch-above"></span>
-                  Above expected
-                </li>
-                <li>
-                  <span class="swatch swatch-below"></span>
-                  Below
-                </li>
-                <li>
-                  <span class="swatch swatch-marker"></span>
-                  Expected
-                </li>
-              </ul>
+          <section class="panel" aria-labelledby="needHeading">
+            <h2 id="needHeading">What you need each week</h2>
+            <dl class="trio">
+              <div>
+                <dt>To break even</dt>
+                <dd id="needBreakEven">$0.00</dd>
+              </div>
+              <div>
+                <dt>To stay on plan</dt>
+                <dd id="needOnPlan">$0.00</dd>
+              </div>
+              <div>
+                <dt>Your usual week</dt>
+                <dd id="needUsual">$0.00</dd>
+              </div>
+            </dl>
+            <p class="hint" id="needWeeksLeft"></p>
+            <div class="meter" id="needMeter" aria-hidden="true">
+              <div class="meter-fill" id="needMeterFill"></div>
+              <div class="meter-marker" id="needMeterMarker">
+                <span>Break even</span>
+              </div>
             </div>
-            <p class="hint">
-              Type what you actually made. Leave a week blank and it counts at
-              your expected amount.
-            </p>
-            <div id="weekList" class="week-list"></div>
+            <div id="needMessage"></div>
+            <details class="explain">
+              <summary>How this is calculated</summary>
+              <div>
+                <dl id="recoveryFacts" class="facts"></dl>
+                <div id="needExplain"></div>
+                <div id="minimumExplain"></div>
+              </div>
+            </details>
           </section>
+
 
           <section class="panel settings" aria-labelledby="settingsHeading">
             <details id="settingsDetails">
@@ -247,12 +274,13 @@
                     </p>
                   </div>
                   <div class="expense-header" aria-hidden="true">
-                    <span>Name</span>
-                    <span>Amount</span>
-                    <span>How often</span>
-                    <span>Per month</span>
-                    <span></span>
-                  </div>
+                  <span>Name</span>
+                  <span>Amount</span>
+                  <span>How often</span>
+                  <span>Due</span>
+                  <span>Per month</span>
+                  <span></span>
+                </div>
                   <div id="expenseList" class="expense-list"></div>
                   <p id="expenseEmpty" class="empty" hidden>
                     No expenses yet. Add your rent, phone, gas, food, and anything
@@ -294,7 +322,7 @@
                           id="savingsWeekly"
                           value="weekly"
                         />
-                        <label for="savingsWeekly">Week</label>
+                        <label for="savingsWeekly">Paycheck</label>
                         <input
                           type="radio"
                           name="savingsFrequency"
@@ -314,39 +342,7 @@
 
         <!-- ===================== RIGHT: what it means ===================== -->
         <div class="column">
-          <section class="panel" aria-labelledby="needHeading">
-            <h2 id="needHeading">What you need each week</h2>
-            <dl class="trio">
-              <div>
-                <dt>To break even</dt>
-                <dd id="needBreakEven">$0.00</dd>
-              </div>
-              <div>
-                <dt>To stay on plan</dt>
-                <dd id="needOnPlan">$0.00</dd>
-              </div>
-              <div>
-                <dt>Your usual week</dt>
-                <dd id="needUsual">$0.00</dd>
-              </div>
-            </dl>
-            <p class="hint" id="needWeeksLeft"></p>
-            <div class="meter" id="needMeter" aria-hidden="true">
-              <div class="meter-fill" id="needMeterFill"></div>
-              <div class="meter-marker" id="needMeterMarker">
-                <span>Break even</span>
-              </div>
-            </div>
-            <div id="needMessage"></div>
-            <details class="explain">
-              <summary>How this is calculated</summary>
-              <div>
-                <dl id="recoveryFacts" class="facts"></dl>
-                <div id="needExplain"></div>
-                <div id="minimumExplain"></div>
-              </div>
-            </details>
-          </section>
+
 
           <section class="panel" aria-labelledby="flowHeading">
             <h2 id="flowHeading">Where this month's income goes</h2>

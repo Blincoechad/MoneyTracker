@@ -59,8 +59,21 @@ function toMonthly(amount, frequency, weeksInMonth) {
   return (amount * timesPerYear) / 12;
 }
 
-function monthlyExpenseTotal(expenses, weeksInMonth) {
-  return expenses.reduce((total, expense) => total + toMonthly(moneyOrZero(expense.amount), expense.frequency, weeksInMonth), 0);
+// What one expense costs in this particular month. Same as toMonthly, except a
+// bill every 2 weeks with a due date counts its real payments this month (2 or 3);
+// without a date it counts half on each payday.
+function monthlyAmount(expense, year, monthIndex, weeksInMonth) {
+  const amount = moneyOrZero(expense.amount);
+  if (expense.frequency === "biweekly") {
+    return parseIsoDate(expense.due)
+      ? amount * dueDaysInMonth(expense, year, monthIndex).length
+      : (amount * weeksInMonth) / 2;
+  }
+  return toMonthly(amount, expense.frequency, weeksInMonth);
+}
+
+function monthlyExpenseTotal(expenses, year, monthIndex, weeksInMonth) {
+  return expenses.reduce((total, expense) => total + monthlyAmount(expense, year, monthIndex, weeksInMonth), 0);
 }
 
 // Savings is only ever weekly or monthly, so it reuses the same converter.
@@ -89,6 +102,12 @@ function buildWeeks(year, monthIndex, paydayWeekday) {
 function findCurrentWeekIndex(weeks, todayDay) {
   const index = weeks.findIndex((week) => todayDay <= week.endDay);
   return index === -1 ? weeks.length : index; // weeks.length = "month is over"
+}
+
+// "2026-10-14" → a local Date, or null for anything else.
+function parseIsoDate(text) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(text ?? ""));
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
 }
 
 function isoDate(date) {
@@ -155,7 +174,9 @@ function calculateBudget(state, today) {
 
   // --- Projection (actuals where entered, expected everywhere else) ---
   const projectedIncome = resolvedWeeks.reduce((sum, week) => sum + week.amountUsed, 0);
-  const monthlyExpenses = monthlyExpenseTotal(state.expenses, weeksInMonth);
+  const year = today.getFullYear();
+  const monthIndex = today.getMonth();
+  const monthlyExpenses = monthlyExpenseTotal(state.expenses, year, monthIndex, weeksInMonth);
   const monthlySavings = monthlySavingsTotal(state.savings, weeksInMonth);
   const projectedRemaining = projectedIncome - monthlyExpenses - monthlySavings;
 
@@ -218,12 +239,95 @@ function calculateBudget(state, today) {
     expenseLines: state.expenses.map((expense) => ({
       id: expense.id,
       name: expense.name.trim() || "Unnamed expense",
-      monthly: toMonthly(moneyOrZero(expense.amount), expense.frequency, weeksInMonth),
+      monthly: monthlyAmount(expense, year, monthIndex, weeksInMonth),
     })),
+
+    paychecks: planPaychecks(state, resolvedWeeks, year, monthIndex),
   };
+}
+
+/* ---------------------------------------------------------------------
+   6. WHICH PAYCHECK PAYS WHICH BILL
+   Each bill is paid from the most recent paycheck on or before the day
+   it's due. Bills without a date land where they're simplest:
+     weekly                → every paycheck
+     monthly, no due day   → the first paycheck
+     every 2 weeks, no date→ half on every paycheck
+     yearly                → 1/12 set aside from the first paycheck
+     savings               → every paycheck (weekly) or the first (monthly)
+   A bill due before this month's first payday is still listed on the
+   first paycheck, flagged so you know it's already due.
+   Everything adds up to the same totals as the summary, so the last
+   paycheck's running total equals "projected remaining".
+   --------------------------------------------------------------------- */
+
+// Days of this month an expense falls due (monthly: its day; every 2 weeks: every 14 days from its date).
+function dueDaysInMonth(expense, year, monthIndex) {
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+  if (expense.frequency === "monthly") {
+    const day = Number.parseInt(expense.due, 10);
+    return day >= 1 && day <= 31 ? [Math.min(day, lastDay)] : [];
+  }
+  if (expense.frequency === "biweekly") {
+    const anchor = parseIsoDate(expense.due);
+    if (!anchor) return [];
+    const days = [];
+    for (let day = 1; day <= lastDay; day++) {
+      const daysApart = Math.round((new Date(year, monthIndex, day) - anchor) / 86_400_000);
+      if (((daysApart % 14) + 14) % 14 === 0) days.push(day);
+    }
+    return days;
+  }
+  return [];
+}
+
+function planPaychecks(state, weeks, year, monthIndex) {
+  const plans = weeks.map(() => []);
+  if (weeks.length === 0) return [];
+  const everyPaycheck = (item) => plans.forEach((items) => items.push({ ...item }));
+
+  for (const expense of state.expenses) {
+    const amount = moneyOrZero(expense.amount);
+    const base = { id: expense.id, name: expense.name.trim() || "Unnamed expense" };
+
+    if (expense.frequency === "weekly") {
+      everyPaycheck({ ...base, amount, when: "every" });
+    } else if (expense.frequency === "yearly") {
+      plans[0].push({ ...base, amount: amount / 12, when: "yearly" });
+    } else if (expense.frequency === "biweekly" && !parseIsoDate(expense.due)) {
+      everyPaycheck({ ...base, amount: amount / 2, when: "half" });
+    } else {
+      const days = dueDaysInMonth(expense, year, monthIndex);
+      if (expense.frequency === "monthly" && days.length === 0) {
+        plans[0].push({ ...base, amount, when: "unset" });
+      }
+      for (const day of days) {
+        const index = weeks.reduce((found, week, i) => (week.startDay <= day ? i : found), -1);
+        plans[Math.max(index, 0)].push({ ...base, amount, when: "due", dueDay: day, beforePayday: index === -1 });
+      }
+    }
+  }
+
+  const savings = moneyOrZero(state.savings.amount);
+  if (savings > 0) {
+    const item = { id: "savings", name: "Savings", amount: savings, isSavings: true };
+    if (state.savings.frequency === "weekly") everyPaycheck({ ...item, when: "every" });
+    else plans[0].push({ ...item, when: "monthly" });
+  }
+
+  // Dated bills first (by due day), then every-paycheck ones, savings last.
+  const order = (item) => (item.isSavings ? 100 : item.when === "due" ? item.dueDay : item.when === "unset" ? 0 : 50);
+  let running = 0;
+  return plans.map((items, i) => {
+    items.sort((a, b) => order(a) - order(b));
+    const out = items.reduce((sum, item) => sum + item.amount, 0);
+    const left = weeks[i].amountUsed - out;
+    running += left;
+    return { key: weeks[i].key, items, out, left, running };
+  });
 }
 
 // Lets Node load this file for testing; browsers simply skip this line.
 if (typeof module !== "undefined") {
-  module.exports = { parseMoney, toMonthly, buildWeeks, resolveWeeks, calculateBudget };
+  module.exports = { parseMoney, toMonthly, monthlyAmount, buildWeeks, resolveWeeks, calculateBudget, planPaychecks, dueDaysInMonth };
 }

@@ -45,12 +45,13 @@ function createExampleState() {
     currentWeek: "auto",
     actualsMonth: currentMonthKey(),
     actuals: { [firstPayday.key]: "425" },
+    paid: {},
     expenses: [
-      { id: newId(), name: "Rent", amount: "700", frequency: "monthly" },
-      { id: newId(), name: "Internet", amount: "20", frequency: "monthly" },
-      { id: newId(), name: "Gas", amount: "40", frequency: "weekly" },
-      { id: newId(), name: "Food", amount: "30", frequency: "weekly" },
-      { id: newId(), name: "Insurance", amount: "55", frequency: "monthly" },
+      { id: newId(), name: "Rent", amount: "700", frequency: "monthly", due: "1" },
+      { id: newId(), name: "Internet", amount: "20", frequency: "monthly", due: "20" },
+      { id: newId(), name: "Gas", amount: "40", frequency: "weekly", due: "" },
+      { id: newId(), name: "Food", amount: "30", frequency: "weekly", due: "" },
+      { id: newId(), name: "Insurance", amount: "55", frequency: "monthly", due: "10" },
     ],
     savings: { amount: "100", frequency: "weekly" },
   };
@@ -64,6 +65,7 @@ function createBlankState() {
     currentWeek: "auto",
     actualsMonth: currentMonthKey(),
     actuals: {},
+    paid: {}, // "<payday>|<bill id>": true once you've marked it paid
     expenses: [],
     savings: { amount: "", frequency: "monthly" },
   };
@@ -184,6 +186,7 @@ function loadState() {
   state.savings = { ...createBlankState().savings, ...(saved.savings || {}) };
   state.expenses = Array.isArray(saved.expenses) ? saved.expenses : [];
   state.actuals = saved.actuals && typeof saved.actuals === "object" ? saved.actuals : {};
+  state.paid = saved.paid && typeof saved.paid === "object" ? saved.paid : {};
   migrateAverageWeeks(state);
   closeMonthIfNeeded(state);
   return state;
@@ -199,6 +202,7 @@ function closeMonthIfNeeded(state) {
     monthNoticeText = "A new month started. Last month's weekly pay was saved to Monthly history and cleared. Your income, bills, and savings are unchanged.";
   }
   state.actuals = {};
+  state.paid = {};
   state.actualsMonth = currentMonthKey();
   state.currentWeek = "auto";
   return true;
@@ -286,30 +290,33 @@ function renderWeekRows() {
   const state = activeState();
   const results = calculate(state);
 
+  // One card per paycheck. The bill list and totals inside are filled by renderWeeks on every change.
   $("weekList").innerHTML = results.weeks
     .map((week) => {
       const label = weekLabel(week);
       const value = state.actuals[week.key] ?? "";
       return `
-        <div class="week-row" data-week-row="${week.index}">
-          <div>
-            <div class="week-name">${label.name}</div>
-            <div class="week-dates">${label.dates}</div>
+        <article class="paycheck" data-week-row="${week.index}">
+          <div class="paycheck-head">
+            <div>
+              <div class="week-name">${label.name}</div>
+              <div class="week-dates">${label.dates}</div>
+            </div>
             <span class="week-status" data-role="status"></span>
           </div>
           <div class="money-input">
             <span aria-hidden="true">$</span>
             <input type="text" inputmode="decimal" autocomplete="off"
               id="actual-${week.key}" data-week-key="${week.key}"
-              aria-label="${label.name} actual income" value="${escapeHtml(value)}">
+              aria-label="${label.name} pay" value="${escapeHtml(value)}">
           </div>
-          <div class="week-bar" aria-hidden="true">
-            <div class="week-bar-fill" data-role="fill"></div>
-            <div class="week-bar-marker" data-role="marker"></div>
-          </div>
-          <div class="week-diff" data-role="diff"></div>
+          <p class="paycheck-diff" data-role="diff"></p>
           <p class="field-error" id="actual-${week.key}-error" role="alert"></p>
-        </div>`;
+          <div class="paycheck-label">Pays for</div>
+          <div class="bill-list" data-role="bills"></div>
+          <dl class="paycheck-totals" data-role="totals"></dl>
+          <p class="paycheck-note" data-role="note" hidden></p>
+        </article>`;
     })
     .join("");
 
@@ -345,6 +352,7 @@ function renderExpenseRows() {
         <select id="exp-${expense.id}-frequency" data-expense-id="${expense.id}" data-expense-field="frequency" aria-label="How often">
           ${frequencyOptions(expense.frequency)}
         </select>
+        ${dueControl(expense)}
         <span class="expense-monthly" data-role="monthly"></span>
         <button type="button" class="remove-button" data-remove-expense="${expense.id}" aria-label="Remove ${escapeHtml(expense.name || "expense")}">×</button>
         <p class="field-error" id="exp-${expense.id}-amount-error" role="alert"></p>
@@ -353,6 +361,27 @@ function renderExpenseRows() {
     .join("");
 
   $("expenseEmpty").hidden = state.expenses.length > 0;
+}
+
+function ordinal(day) {
+  const suffix = day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
+  return `${day}${suffix}`;
+}
+
+// When is this bill due? Monthly: a day of the month. Every 2 weeks: any one date it's due.
+function dueControl(expense) {
+  const attrs = `class="expense-due" id="exp-${expense.id}-due" data-expense-id="${expense.id}" data-expense-field="due"`;
+  if (expense.frequency === "monthly") {
+    const day = Number.parseInt(expense.due, 10);
+    const options = [`<option value="">No due day</option>`];
+    for (let d = 1; d <= 31; d++) options.push(`<option value="${d}"${d === day ? " selected" : ""}>Due ${ordinal(d)}</option>`);
+    return `<select ${attrs} aria-label="Day it's due each month">${options.join("")}</select>`;
+  }
+  if (expense.frequency === "biweekly") {
+    const value = parseIsoDate(expense.due) ? expense.due : "";
+    return `<input type="date" ${attrs} value="${value}" aria-label="A date it's due">`;
+  }
+  return `<span class="expense-due expense-due-text">${expense.frequency === "weekly" ? "Every payday" : "Set aside monthly"}</span>`;
 }
 
 // Copies the state's values into the fixed inputs (used on load, reset, and What-If switches).
@@ -466,45 +495,91 @@ function renderKpis(r, base) {
   setKpi("kpiSavings", money(r.monthlySavings), "Set aside, not spent", b.monthlySavings, r.monthlySavings);
 }
 
+const CHECK_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>`;
+
+function shortDate(date) {
+  return `${WEEKDAY_SHORT[date.getDay()]}, ${MONTH_NAMES_SHORT[date.getMonth()]} ${date.getDate()}`;
+}
+
+function dueText(item) {
+  const now = new Date();
+  switch (item.when) {
+    case "due": {
+      const text = `Due ${MONTH_NAMES_SHORT[now.getMonth()]} ${item.dueDay}`;
+      return item.beforePayday ? `${text} · before payday` : text;
+    }
+    case "every": return "Every payday";
+    case "half": return "Half of an every-2-weeks bill";
+    case "yearly": return "Set aside for a yearly bill";
+    case "monthly": return "Once a month";
+    default: return "No due day set";
+  }
+}
+
+// The checklist of bills one paycheck covers. Tapping one marks it paid.
+function billListHtml(plan, state) {
+  if (plan.items.length === 0) return `<p class="bill-empty">Nothing due from this paycheck.</p>`;
+  return plan.items
+    .map((item) => {
+      const key = `${plan.key}|${item.id}`;
+      const paid = Boolean(state.paid[key]);
+      return `
+        <button type="button" class="bill-check${paid ? " is-paid" : ""}${item.isSavings ? " is-savings" : ""}" data-paid-key="${escapeHtml(key)}" aria-pressed="${paid}">
+          <span class="bill-box" aria-hidden="true">${paid ? CHECK_ICON : ""}</span>
+          <span class="bill-text">
+            <span class="bill-name">${escapeHtml(item.name)}</span>
+            <span class="bill-due${item.beforePayday ? " is-late" : ""}">${dueText(item)}</span>
+          </span>
+          <span class="bill-amount">${money(item.amount)}</span>
+        </button>`;
+    })
+    .join("");
+}
+
 function renderWeeks(r, state) {
-  // One scale for every bar so the weeks compare fairly.
-  const largest = Math.max(r.expectedWeekly, ...r.weeks.map((week) => week.amountUsed), 1);
-  const percent = (amount) => `${Math.min(100, (amount / largest) * 100)}%`;
   const statusText = { actual: "Actual", assumed: "Past · assumed", open: "Upcoming" };
+  const thisWeek = latestPaydayWeek(r.weeks);
 
-  r.weeks.forEach((week) => {
-    const row = document.querySelector(`[data-week-row="${week.index}"]`);
-    if (!row) return;
-    row.classList.toggle("is-current", week.index === r.currentWeekIndex);
+  r.weeks.forEach((week, i) => {
+    const card = document.querySelector(`[data-week-row="${week.index}"]`);
+    if (!card) return;
+    const plan = r.paychecks[i];
+    const isThisWeek = week === thisWeek;
+    card.classList.toggle("is-current", isThisWeek);
+    card.classList.toggle("is-short", plan.left < -0.005);
 
-    const status = row.querySelector('[data-role="status"]');
-    status.dataset.status = week.status;
-    status.textContent = week.index === r.currentWeekIndex && week.status === "open" ? "This week" : statusText[week.status];
+    const status = card.querySelector('[data-role="status"]');
+    status.dataset.status = isThisWeek && week.status !== "actual" ? "current" : week.status;
+    status.textContent = isThisWeek ? "This week" : statusText[week.status];
 
-    const input = row.querySelector("input");
-    input.placeholder = r.expectedWeekly.toFixed(2);
+    card.querySelector("input").placeholder = r.expectedWeekly.toFixed(2);
 
-    const fill = row.querySelector('[data-role="fill"]');
-    fill.style.width = percent(week.amountUsed);
     const diff = clean(week.difference);
-    fill.classList.toggle("is-above", week.status === "actual" && diff > 0);
-    fill.classList.toggle("is-below", week.status === "actual" && diff < 0);
-    fill.classList.toggle("is-even", week.status === "actual" && diff === 0);
-    row.querySelector('[data-role="marker"]').style.left = `calc(${percent(r.expectedWeekly)} - 1px)`;
+    const diffCell = card.querySelector('[data-role="diff"]');
+    diffCell.textContent = week.status === "actual"
+      ? `${signedMoney(diff)} vs your usual week`
+      : `Counts as ${money(week.amountUsed)} (${week.status === "assumed" ? "assumed" : "expected"})`;
+    diffCell.className = `paycheck-diff ${week.status === "actual" && diff > 0 ? "text-good" : week.status === "actual" && diff < 0 ? "text-bad" : ""}`;
 
-    const diffCell = row.querySelector('[data-role="diff"]');
-    if (week.status === "actual") {
-      diffCell.innerHTML = `${signedMoney(diff)}<small>vs expected</small>`;
-      diffCell.className = `week-diff ${diff > 0 ? "text-good" : diff < 0 ? "text-bad" : ""}`;
-    } else {
-      diffCell.innerHTML = `${money(week.amountUsed)}<small>${week.status === "assumed" ? "assumed" : "expected"}</small>`;
-      diffCell.className = "week-diff";
+    card.querySelector('[data-role="bills"]').innerHTML = billListHtml(plan, state);
+    card.querySelector('[data-role="totals"]').innerHTML = `
+      <div><dt>Left from this check</dt><dd class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</dd></div>
+      <div><dt>Running total</dt><dd>${signedMoney(plan.running)}</dd></div>`;
+
+    // A short paycheck is fine if earlier ones left enough behind; say which it is.
+    const note = card.querySelector('[data-role="note"]');
+    const carried = plan.running - plan.left;
+    note.hidden = plan.left >= -0.005;
+    if (!note.hidden) {
+      note.innerHTML = plan.running >= -0.005
+        ? `This check runs <strong>${money(-plan.left)} short</strong>. The ${money(carried)} left over from earlier checks covers it.`
+        : `This check runs <strong>${money(-plan.left)} short</strong>, and earlier checks don't cover it. You're ${money(-plan.running)} behind so far this month.`;
     }
   });
 
   const monthName = new Date().toLocaleDateString("en-US", { month: "long" });
   const count = r.weeks.length;
-  $("weeksHeading").textContent = `${count} weeks in ${monthName}`;
+  $("weeksHeading").textContent = `${count} paychecks in ${monthName}`;
   $("weekCountHint").textContent = `${monthName} has ${count} ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}, so this is a ${count}-week month.`;
 }
 
@@ -541,6 +616,18 @@ function renderThisWeek(r, state) {
     ? `${signedMoney(week.difference)} vs your usual week`
     : `Leave it blank and it counts as ${money(r.expectedWeekly)}`;
   $("thisWeekResult").innerHTML = `${status} · Left this month: <strong class="${r.isPositive ? "text-good" : "text-bad"}">${signedMoney(r.projectedRemaining)}</strong>`;
+
+  const plan = r.paychecks[week.index];
+  const paidCount = plan.items.filter((item) => state.paid[`${plan.key}|${item.id}`]).length;
+  $("thisWeekBills").innerHTML = billListHtml(plan, state);
+  $("thisWeekProgress").textContent = plan.items.length ? `${paidCount} of ${plan.items.length} done` : "";
+
+  // Until the next payday: the next card, or a week after the last one (next month's first).
+  const next = r.weeks[week.index + 1];
+  const nextDate = next ? new Date(`${next.key}T12:00:00`) : new Date(new Date(`${week.key}T12:00:00`).getTime() + 7 * 86_400_000);
+  $("thisWeekSpend").innerHTML = plan.items.length === 0
+    ? `Nothing due from this paycheck. All ${money(week.amountUsed)} is yours until ${shortDate(nextDate)}.`
+    : `${money(week.amountUsed)} − ${money(plan.out)} = <strong class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</strong> ${plan.left < -0.005 ? "short" : "to spend"} until ${shortDate(nextDate)}`;
 }
 
 function renderNeeds(r) {
@@ -611,7 +698,7 @@ function renderSettingsSummary(r, state) {
     `${money(r.expectedWeekly)}/week`,
     `paid ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}`,
     `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} (${money(r.monthlyExpenses)})`,
-    savings > 0 ? `saving ${money(savings)}/${state.savings.frequency === "weekly" ? "week" : "month"}` : "no savings goal",
+    savings > 0 ? `saving ${money(savings)}/${state.savings.frequency === "weekly" ? "paycheck" : "month"}` : "no savings goal",
   ];
   $("settingsSummary").textContent = parts.join(" · ");
 }
@@ -713,7 +800,7 @@ function renderExplanations(r, state) {
   const savingsAmount = parseMoney(state.savings.amount).value ?? 0;
   $("savingsExplain").textContent =
     state.savings.frequency === "weekly"
-      ? `${money(savingsAmount)} × ${r.weeks.length} weeks = ${money(r.monthlySavings)} this month. Subtracted from what's left, but not counted as an expense.`
+      ? `${money(savingsAmount)} from each of this month's ${r.weeks.length} paychecks = ${money(r.monthlySavings)}. Subtracted from what's left, but not counted as an expense.`
       : `${money(r.monthlySavings)} per month. Subtracted from what's left, but not counted as an expense.`;
 }
 
@@ -960,6 +1047,10 @@ function handleChange(event) {
     if (!expense) return;
     expense[el.dataset.expenseField] = el.value;
     if (el.dataset.expenseField === "amount") validateAmount(el);
+    if (el.dataset.expenseField === "frequency") {
+      renderExpenseRows(); // the Due control depends on how often
+      $(`exp-${expense.id}-frequency`)?.focus();
+    }
   } else {
     return; // not one of our inputs
   }
@@ -977,8 +1068,22 @@ document.addEventListener("change", (event) => {
 
 /* ---------- Buttons ---------- */
 
+// Tapping a bill on a paycheck marks it paid (or unpaid). The list redraws, so focus goes back to it.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-paid-key]");
+  if (!button) return;
+  const state = activeState();
+  const key = button.dataset.paidKey;
+  if (state.paid[key]) delete state.paid[key];
+  else state.paid[key] = true;
+  if (!scenario) baseline.isExample = false;
+  const area = button.closest("#thisWeek") ? "#thisWeek" : "#weekList";
+  refresh();
+  document.querySelector(`${area} [data-paid-key="${CSS.escape(key)}"]`)?.focus();
+});
+
 $("addExpense").addEventListener("click", () => {
-  const expense = { id: newId(), name: "", amount: "", frequency: "monthly" };
+  const expense = { id: newId(), name: "", amount: "", frequency: "monthly", due: "" };
   activeState().expenses.push(expense);
   if (!scenario) baseline.isExample = false;
   renderExpenseRows();
