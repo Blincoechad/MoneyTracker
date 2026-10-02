@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- App icon: source for the PNGs in this folder. Square and full-bleed;
+       phones round the corners themselves. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#138494"/>
+      <stop offset="1" stop-color="#0b5561"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- rising bars -->
+  <g fill="#ffffff" fill-opacity="0.18">
+    <rect x="96"  y="300" width="72" height="116" rx="12"/>
+    <rect x="220" y="236" width="72" height="180" rx="12"/>
+    <rect x="344" y="160" width="72" height="256" rx="12"/>
+  </g>
+  <!-- dollar sign -->
+  <g fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M330 178c-14-24-42-38-74-38c-40 0-74 22-74 56c0 32 28 46 74 56s80 26 80 60c0 34-36 58-80 58c-34 0-64-14-80-40"/>
+    <line x1="256" y1="96" x2="256" y2="140"/>
+    <line x1="256" y1="372" x2="256" y2="416"/>
+  </g>
+</svg>
