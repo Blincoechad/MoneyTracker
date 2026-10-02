@@ -36,14 +36,15 @@ function newId() {
 }
 
 function createExampleState() {
+  const today = new Date();
+  const firstPayday = buildWeeks(today.getFullYear(), today.getMonth(), 5)[0];
   return {
     isExample: true,
     expectedWeekly: "500",
-    weekMode: "average",
     paydayWeekday: 5,
     currentWeek: "auto",
     actualsMonth: currentMonthKey(),
-    actuals: { "avg-1": "425" },
+    actuals: { [firstPayday.key]: "425" },
     expenses: [
       { id: newId(), name: "Rent", amount: "700", frequency: "monthly" },
       { id: newId(), name: "Internet", amount: "20", frequency: "monthly" },
@@ -59,7 +60,6 @@ function createBlankState() {
   return {
     isExample: false,
     expectedWeekly: "",
-    weekMode: "average",
     paydayWeekday: 5,
     currentWeek: "auto",
     actualsMonth: currentMonthKey(),
@@ -69,12 +69,15 @@ function createBlankState() {
   };
 }
 
+// Declared before loadState() runs, because loadState() writes to them.
+let monthNoticeText = "";
+let closedMonth = null; // { key, state } of the month that just ended, waiting to be archived
+
 // Two copies of the budget can exist:
 //   baseline — your real, saved budget
 //   scenario — a temporary copy for What-If mode (null when not in use)
 let baseline = loadState() ?? createExampleState();
 let scenario = null;
-let monthNoticeText = "";
 
 // Whichever copy is being edited right now.
 function activeState() {
@@ -90,7 +93,9 @@ function activeState() {
 
 function saveState() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(baseline));
+    const json = JSON.stringify(baseline);
+    // Skipping unchanged writes stops two open tabs from echoing saves back and forth.
+    if (localStorage.getItem(STORAGE_KEY) !== json) localStorage.setItem(STORAGE_KEY, json);
   } catch (error) {
     /* storage unavailable — keep working without it */
   }
@@ -110,17 +115,42 @@ function loadState() {
   state.savings = { ...createBlankState().savings, ...(saved.savings || {}) };
   state.expenses = Array.isArray(saved.expenses) ? saved.expenses : [];
   state.actuals = saved.actuals && typeof saved.actuals === "object" ? saved.actuals : {};
-
-  // A new month starts with a clean set of weekly actuals.
-  if (state.actualsMonth !== currentMonthKey()) {
-    if (Object.keys(state.actuals).length > 0) {
-      monthNoticeText = "A new month started, so last month's weekly actuals were cleared. Your income, bills, and savings are unchanged.";
-    }
-    state.actuals = {};
-    state.actualsMonth = currentMonthKey();
-    state.currentWeek = "auto";
-  }
+  migrateAverageWeeks(state);
+  closeMonthIfNeeded(state);
   return state;
+}
+
+// A new month starts with a clean set of weekly actuals.
+// The finished month is copied first so it can be written to a report.
+// Returns true when a month was closed.
+function closeMonthIfNeeded(state) {
+  if (state.actualsMonth === currentMonthKey()) return false;
+  if (!state.isExample) {
+    closedMonth = { key: state.actualsMonth, state: structuredClone(state) };
+    monthNoticeText = "A new month started. Last month's weekly pay was saved to Monthly history and cleared. Your income, bills, and savings are unchanged.";
+  }
+  state.actuals = {};
+  state.actualsMonth = currentMonthKey();
+  state.currentWeek = "auto";
+  return true;
+}
+
+// Older saves had an "Average month" mode with weeks keyed avg-1 … avg-4.
+// Move each of those amounts onto the matching payday week of that month.
+function migrateAverageWeeks(state) {
+  if ("weekMode" in state) {
+    if (state.weekMode === "average") state.currentWeek = "auto";
+    delete state.weekMode;
+  }
+  const [year, month] = state.actualsMonth.split("-").map(Number);
+  const weeks = buildWeeks(year, month - 1, Number(state.paydayWeekday));
+  for (const key of Object.keys(state.actuals)) {
+    const match = /^avg-(\d)$/.exec(key);
+    if (!match) continue;
+    const week = weeks[Number(match[1]) - 1];
+    if (week && !(week.key in state.actuals)) state.actuals[week.key] = state.actuals[key];
+    delete state.actuals[key];
+  }
 }
 
 /* =====================================================================
@@ -157,13 +187,10 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 }
 
-function weekLabel(week) {
-  const month = MONTH_NAMES_SHORT[new Date().getMonth()];
-  if (week.isPayday) {
-    const weekday = WEEKDAY_SHORT[new Date(`${week.key}T12:00:00`).getDay()];
-    return { name: `Payday ${week.index + 1}`, dates: `${weekday}, ${month} ${week.startDay}` };
-  }
-  return { name: `Week ${week.index + 1}`, dates: `${month} ${week.startDay}–${week.endDay}` };
+function weekLabel(week, monthIndex = new Date().getMonth()) {
+  const month = MONTH_NAMES_SHORT[monthIndex];
+  const weekday = WEEKDAY_SHORT[new Date(`${week.key}T12:00:00`).getDay()];
+  return { name: `Week ${week.index + 1}`, dates: `Payday ${weekday}, ${month} ${week.startDay}` };
 }
 
 const $ = (id) => document.getElementById(id);
@@ -264,7 +291,6 @@ function renderInputs() {
   const state = activeState();
   $("expectedWeekly").value = state.expectedWeekly;
   $("savingsAmount").value = state.savings.amount;
-  $(state.weekMode === "paydays" ? "weekModePaydays" : "weekModeAverage").checked = true;
   $(state.savings.frequency === "weekly" ? "savingsWeekly" : "savingsMonthly").checked = true;
   $("paydayWeekday").value = String(state.paydayWeekday);
   validateAmount($("expectedWeekly"));
@@ -428,15 +454,10 @@ function renderWeeks(r, state) {
     }
   });
 
-  const extra = $("extraWeekNote");
-  extra.hidden = r.extraWeeks === 0;
-  if (r.extraWeeks > 0) {
-    extra.textContent = `+ ${r.extraWeeks.toFixed(2)} week at your expected rate = ${money(r.extraWeekIncome)}. An average month is 52 ÷ 12 = 4.33 weeks, so this covers the days beyond 4 full weeks.`;
-  }
-
-  const paydayCount = buildWeeks(new Date().getFullYear(), new Date().getMonth(), "paydays", Number(state.paydayWeekday)).weeks.length;
-  $("paydayCountLabel").textContent = `${paydayCount} ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]} this month`;
-  $("paydayField").hidden = state.weekMode !== "paydays";
+  const monthName = new Date().toLocaleDateString("en-US", { month: "long" });
+  const count = r.weeks.length;
+  $("weeksHeading").textContent = `${count} weeks in ${monthName}`;
+  $("weekCountHint").textContent = `${monthName} has ${count} ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}, so this is a ${count}-week month.`;
 }
 
 function renderExpenseMonthly(r) {
@@ -582,22 +603,14 @@ function renderExpenseBars(r) {
 function renderExplanations(r, state) {
   const weekly = money(r.expectedWeekly);
   const weekParts = r.weeks.map((week) => money(week.amountUsed));
-  if (r.extraWeeks > 0) weekParts.push(`${money(r.extraWeekIncome)} (0.33 wk)`);
-
-  const baselineLine =
-    state.weekMode === "average"
-      ? `<p><strong>Baseline:</strong> <span class="formula">${weekly} × 52 ÷ 12 = ${money(r.baselineMonthlyIncome)}</span></p>`
-      : `<p><strong>Baseline:</strong> <span class="formula">${weekly} × ${r.weeks.length} paydays = ${money(r.baselineMonthlyIncome)}</span></p>`;
 
   $("incomeExplain").innerHTML = `
-    ${baselineLine}
+    <p><strong>Baseline:</strong> <span class="formula">${weekly} × ${r.weeks.length} weeks = ${money(r.baselineMonthlyIncome)}</span></p>
     <p><strong>Projection:</strong> add up every week, using your actual amount where you entered one and ${weekly} where you didn't.</p>
     <p class="formula">${weekParts.join(" + ") || "$0.00"} = ${money(r.projectedIncome)}</p>
-    <p>${state.weekMode === "average"
-      ? "Average month counts every month as 4.33 weeks, so your plan doesn't jump between 4- and 5-week months."
-      : "Paydays counts the real paydays this month. Months with 5 paydays show more income than months with 4."}</p>`;
+    <p>Each payday this month is one week, so 5-payday months show more income than 4-payday months. Weekly bills and savings are counted the same way.</p>`;
 
-  const divisor = state.weekMode === "average" ? "× 12 ÷ 52" : `÷ ${r.weeks.length} paydays`;
+  const divisor = `÷ ${r.weeks.length} weeks`;
   $("minimumExplain").innerHTML = `
     <p class="formula">${money(r.monthlyExpenses)} expenses + ${money(r.monthlySavings)} savings = ${money(r.requiredMonthlyIncome)} needed per month</p>
     <p class="formula">${money(r.requiredMonthlyIncome)} ${divisor} = ${money(r.minimumWeeklyIncome)} per week</p>
@@ -606,7 +619,7 @@ function renderExplanations(r, state) {
   const savingsAmount = parseMoney(state.savings.amount).value ?? 0;
   $("savingsExplain").textContent =
     state.savings.frequency === "weekly"
-      ? `${money(savingsAmount)} × 52 ÷ 12 = ${money(r.monthlySavings)} per month. Subtracted from what's left, but not counted as an expense.`
+      ? `${money(savingsAmount)} × ${r.weeks.length} weeks = ${money(r.monthlySavings)} this month. Subtracted from what's left, but not counted as an expense.`
       : `${money(r.monthlySavings)} per month. Subtracted from what's left, but not counted as an expense.`;
 }
 
@@ -618,6 +631,187 @@ function renderBanners() {
   document.body.classList.toggle("is-whatif", Boolean(scenario));
   $("whatIfToggle").textContent = scenario ? "Exit what-if" : "Try a what-if";
 }
+
+/* =====================================================================
+   6b. MONTHLY HISTORY
+   When a month ends, its weeks and pay are written into a plain-text
+   report and kept in browser storage. Each month shows as a pill in the
+   Monthly history panel; its ⋯ menu downloads the .txt or deletes it.
+   ===================================================================== */
+
+const HISTORY_KEY = "personal-budget-dashboard-history-v1";
+
+function loadHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HISTORY_KEY));
+    return Array.isArray(saved) ? saved : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveHistory(history) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch (error) {
+    /* storage unavailable — history won't survive a reload */
+  }
+}
+
+function monthName(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+// Builds the text report for one finished month from that month's saved state.
+function buildMonthReport(monthKey, state) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const lastDay = new Date(year, month, 0); // last day of that month
+  // Calculate as if the month is over, so every week counts as finished.
+  const r = calculateBudget({ ...state, currentWeek: 99 }, lastDay);
+
+  const enteredWeeks = r.weeks.filter((week) => week.status === "actual");
+  const totalEntered = enteredWeeks.reduce((sum, week) => sum + week.actual, 0);
+  const pad = (text, width) => String(text).padEnd(width);
+
+  const lines = [
+    `Personal Budget — ${monthName(monthKey)}`,
+    `Saved ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+    "",
+    `Expected weekly take-home: ${money(r.expectedWeekly)}`,
+    `Weeks this month: ${r.weeks.length}`,
+    "",
+    "WEEKS",
+  ];
+  r.weeks.forEach((week) => {
+    const label = weekLabel(week, month - 1);
+    const amount = week.status === "actual" ? money(week.actual) : "—";
+    const note = week.status === "actual" ? "" : `  (not entered, counted as ${money(week.expected)})`;
+    lines.push(`  ${pad(label.name, 11)}${pad(label.dates, 14)}${amount}${note}`);
+  });
+  lines.push(
+    "",
+    `Total pay entered:   ${money(totalEntered)}  (${enteredWeeks.length} of ${r.weeks.length} weeks)`,
+    `Month total:         ${money(r.projectedIncome)}  (entered pay + expected for blank weeks)`,
+    "",
+    `Bills & expenses:    ${money(r.monthlyExpenses)}`,
+    `Savings:             ${money(r.monthlySavings)}`,
+    `Remaining:           ${signedMoney(r.projectedRemaining)}`,
+    ""
+  );
+  return { month: monthKey, totalEntered, monthTotal: r.projectedIncome, text: lines.join("\n") };
+}
+
+function downloadReport(report) {
+  const blob = new Blob([report.text], { type: "text/plain" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `budget-${report.month}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+// Runs once on load: if a month just ended, add its report to the history.
+function archiveClosedMonth() {
+  if (!closedMonth) return;
+  const report = buildMonthReport(closedMonth.key, closedMonth.state);
+  closedMonth = null;
+  const history = loadHistory().filter((item) => item.month !== report.month);
+  history.push(report);
+  history.sort((a, b) => b.month.localeCompare(a.month)); // newest first
+  saveHistory(history);
+}
+
+let openMenuMonth = null; // which pill's ⋯ menu is open
+let confirmDeleteMonth = null; // Delete asks once before removing
+
+// Redrawing the list drops keyboard focus, so `focusSelector` puts it back.
+function renderHistory(focusSelector) {
+  const history = loadHistory();
+  $("historyEmpty").hidden = history.length > 0;
+  $("historyList").innerHTML = history
+    .map((item) => {
+      const isOpen = item.month === openMenuMonth;
+      const deleteText = item.month === confirmDeleteMonth ? "Click again to delete" : "Delete month";
+      return `
+      <li class="history-pill${isOpen ? " is-open" : ""}">
+        <span class="history-month">${monthName(item.month)}</span>
+        <span class="history-total">${money(item.monthTotal)}</span>
+        <button type="button" class="history-menu-button" data-menu-month="${item.month}"
+          aria-label="Options for ${monthName(item.month)}" aria-haspopup="menu" aria-expanded="${isOpen}">⋯</button>
+        <div class="history-menu" role="menu"${isOpen ? "" : " hidden"}>
+          <button type="button" role="menuitem" data-download-month="${item.month}">Download .txt</button>
+          <button type="button" role="menuitem" class="is-danger" data-delete-month="${item.month}">${deleteText}</button>
+        </div>
+      </li>`;
+    })
+    .join("");
+  if (focusSelector) $("historyList").querySelector(focusSelector)?.focus();
+}
+
+function closeHistoryMenu(focusSelector) {
+  if (openMenuMonth === null && confirmDeleteMonth === null) return;
+  openMenuMonth = null;
+  confirmDeleteMonth = null;
+  renderHistory(focusSelector);
+}
+
+$("historyList").addEventListener("click", (event) => {
+  const menuButton = event.target.closest("[data-menu-month]");
+  const downloadButton = event.target.closest("[data-download-month]");
+  const deleteButton = event.target.closest("[data-delete-month]");
+
+  if (menuButton) {
+    const month = menuButton.dataset.menuMonth;
+    openMenuMonth = openMenuMonth === month ? null : month;
+    confirmDeleteMonth = null;
+    renderHistory(openMenuMonth ? `[data-download-month="${month}"]` : `[data-menu-month="${month}"]`);
+  } else if (downloadButton) {
+    const month = downloadButton.dataset.downloadMonth;
+    const report = loadHistory().find((item) => item.month === month);
+    if (report) downloadReport(report);
+    closeHistoryMenu(`[data-menu-month="${month}"]`);
+  } else if (deleteButton) {
+    const month = deleteButton.dataset.deleteMonth;
+    if (confirmDeleteMonth !== month) {
+      confirmDeleteMonth = month;
+      renderHistory(`[data-delete-month="${month}"]`);
+      return;
+    }
+    saveHistory(loadHistory().filter((item) => item.month !== month));
+    closeHistoryMenu("[data-menu-month]"); // focus moves to the next month's ⋯
+  }
+});
+
+// The page may stay open past midnight on the last day of the month.
+// Close out the old month before anything new is typed into it.
+function checkForNewMonth() {
+  if (!closeMonthIfNeeded(baseline)) return false;
+  if (scenario) {
+    scenario.actuals = {};
+    scenario.actualsMonth = baseline.actualsMonth;
+    scenario.currentWeek = "auto";
+  }
+  archiveClosedMonth();
+  renderInputs();
+  renderHistory();
+  return true;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkForNewMonth();
+});
+window.addEventListener("focus", checkForNewMonth);
+
+// Clicking anywhere else, or pressing Escape, closes the menu.
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".history-pill")) closeHistoryMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && openMenuMonth) closeHistoryMenu(`[data-menu-month="${openMenuMonth}"]`);
+});
 
 /* =====================================================================
    7. INPUT — listen for changes
@@ -636,6 +830,7 @@ function validateAmount(input) {
 }
 
 function handleChange(event) {
+  if (checkForNewMonth()) return; // the page was open across a month change
   const el = event.target;
   const state = activeState();
   let structureChanged = false;
@@ -648,10 +843,6 @@ function handleChange(event) {
     validateAmount(el);
   } else if (el.name === "savingsFrequency") {
     state.savings.frequency = el.value;
-  } else if (el.name === "weekMode") {
-    state.weekMode = el.value;
-    state.currentWeek = "auto";
-    structureChanged = true;
   } else if (el.id === "paydayWeekday") {
     state.paydayWeekday = Number(el.value);
     state.currentWeek = "auto";
@@ -759,6 +950,115 @@ $("resetAll").addEventListener("click", (event) => {
   renderInputs();
 });
 
+// The reminder opens a new tab. If the dashboard is already open in another
+// tab, pick up what that tab saved so this one doesn't overwrite it later.
+window.addEventListener("storage", (event) => {
+  if (event.key === STORAGE_KEY) {
+    const fresh = loadState();
+    if (!fresh) return;
+    baseline = fresh;
+    if (!scenario) renderInputs();
+  } else if (event.key === HISTORY_KEY) {
+    renderHistory();
+  }
+});
+
+/* ---------- Backup & restore ----------
+   Everything lives in Safari's storage, so clearing Safari's website data
+   erases it. "Back up" saves the budget and Monthly history to a .json file
+   in Downloads; "Restore backup" reads that file back in. */
+
+const BACKUP_DATE_KEY = "personal-budget-dashboard-last-backup";
+
+let backupMessageTimer = null;
+
+// `tone` is "good" for the green success message; it fades back to the date after a few seconds.
+function renderBackupStatus(message, tone) {
+  clearTimeout(backupMessageTimer);
+  $("backupStatus").classList.toggle("text-good", tone === "good");
+  if (message) backupMessageTimer = setTimeout(() => renderBackupStatus(), 6000);
+  let lastBackup = null;
+  try {
+    lastBackup = localStorage.getItem(BACKUP_DATE_KEY);
+  } catch (error) {
+    /* storage unavailable */
+  }
+  $("backupStatus").textContent = message
+    ?? (lastBackup
+      ? `Last backup: ${new Date(lastBackup).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+      : "No backup yet");
+}
+
+$("backupButton").addEventListener("click", () => {
+  const savedAt = new Date();
+  const backup = { app: "personal-budget-dashboard", version: 1, savedAt: savedAt.toISOString(), budget: baseline, history: loadHistory() };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  // The time keeps two backups made on the same day from overwriting each other.
+  const time = `${String(savedAt.getHours()).padStart(2, "0")}${String(savedAt.getMinutes()).padStart(2, "0")}`;
+  link.download = `budget-backup-${isoDate(savedAt)}-${time}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  try {
+    localStorage.setItem(BACKUP_DATE_KEY, savedAt.toISOString());
+  } catch (error) {
+    /* storage unavailable */
+  }
+  renderBackupStatus("Your information for the month has been backed up!", "good");
+});
+
+$("restoreButton").addEventListener("click", () => $("restoreFile").click());
+
+$("restoreFile").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  event.target.value = ""; // lets the same file be picked again later
+  if (!file) return;
+
+  let backup;
+  try {
+    backup = JSON.parse(await file.text());
+  } catch (error) {
+    backup = null;
+  }
+  if (!backup || backup.app !== "personal-budget-dashboard" || typeof backup.budget !== "object" || !Array.isArray(backup.history)) {
+    renderBackupStatus("That file isn't a budget backup. Pick a budget-backup-….json file.");
+    return;
+  }
+
+  // Months already in history stay; the backup fills in any that are missing.
+  const history = loadHistory();
+  for (const item of backup.history) {
+    if (!history.some((existing) => existing.month === item.month)) history.push(item);
+  }
+  history.sort((a, b) => b.month.localeCompare(a.month));
+  saveHistory(history);
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(backup.budget));
+    // The file just restored is a backup too; keep the newer of the two dates.
+    const lastBackup = localStorage.getItem(BACKUP_DATE_KEY);
+    if (!lastBackup || lastBackup < backup.savedAt) localStorage.setItem(BACKUP_DATE_KEY, backup.savedAt);
+  } catch (error) {
+    /* storage unavailable — the restore still shows until the page closes */
+  }
+  // loadState cleans the data up and closes the month if the backup is from an earlier one.
+  monthNoticeText = "";
+  baseline = loadState() ?? { ...createBlankState(), ...backup.budget };
+  scenario = null;
+  archiveClosedMonth();
+  if (!monthNoticeText) {
+    monthNoticeText = `Restored your backup from ${new Date(backup.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`;
+  }
+  renderInputs(); // also saves
+  renderHistory();
+  renderBackupStatus();
+});
+
+renderBackupStatus();
+
 // Show the slim summary bar once the big status card scrolls off screen.
 if ("IntersectionObserver" in window) {
   new IntersectionObserver(([entry]) => {
@@ -767,4 +1067,30 @@ if ("IntersectionObserver" in window) {
 }
 
 /* ---------- Start ---------- */
-renderInputs();
+archiveClosedMonth();
+renderInputs(); // also saves, so the cleared month is stored and can't be archived twice
+renderHistory();
+
+// The Friday reminder (tools/pay-reminder.sh) opens the page as index.html?pay=275.
+// Save that amount to the most recent payday week, then clean up the address.
+(function fillPayFromLink() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has("pay")) return;
+  history.replaceState(null, "", location.pathname); // a reload won't enter it twice
+
+  const { value } = parseMoney(params.get("pay"));
+  const today = new Date().getDate();
+  const week = calculate(baseline).weeks.filter((item) => item.startDay <= today).pop();
+  if (value === null || !week) {
+    monthNoticeText = "The pay from your reminder couldn't be saved. Enter it in the week below.";
+    renderBanners();
+    return;
+  }
+
+  scenario = null;
+  baseline.actuals[week.key] = String(value);
+  baseline.isExample = false;
+  const label = weekLabel(week);
+  monthNoticeText = `Saved ${money(value)} to ${label.name} (${label.dates}).`;
+  renderInputs(); // also saves
+})();

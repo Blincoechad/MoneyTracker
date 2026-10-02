@@ -160,34 +160,8 @@
               </p>
             </div>
 
-            <fieldset class="field">
-              <legend>Count this month as</legend>
-              <div class="segmented">
-                <input
-                  type="radio"
-                  name="weekMode"
-                  id="weekModeAverage"
-                  value="average"
-                />
-                <label for="weekModeAverage">
-                  Average month
-                  <small>4.33 weeks (× 52 ÷ 12)</small>
-                </label>
-                <input
-                  type="radio"
-                  name="weekMode"
-                  id="weekModePaydays"
-                  value="paydays"
-                />
-                <label for="weekModePaydays">
-                  My paydays
-                  <small id="paydayCountLabel">this month</small>
-                </label>
-              </div>
-            </fieldset>
-
             <div class="field-row">
-              <div class="field" id="paydayField">
+              <div class="field">
                 <label for="paydayWeekday">Payday</label>
                 <select id="paydayWeekday">
                   <option value="0">Sunday</option>
@@ -204,6 +178,7 @@
                 <select id="currentWeek"></select>
               </div>
             </div>
+            <p class="hint" id="weekCountHint"></p>
 
             <details class="explain">
               <summary>How monthly income is calculated</summary>
@@ -234,7 +209,6 @@
               your expected amount.
             </p>
             <div id="weekList" class="week-list"></div>
-            <p id="extraWeekNote" class="hint extra-week" hidden></p>
           </section>
 
           <section class="panel" aria-labelledby="expensesHeading">
@@ -386,6 +360,19 @@
             <h2 id="expenseBarsHeading">Expenses by monthly cost</h2>
             <div id="expenseBars" class="hbars"></div>
           </section>
+
+          <section class="panel" aria-labelledby="historyHeading">
+            <h2 id="historyHeading">Monthly history</h2>
+            <p class="hint">
+              When a month ends, its weeks and pay are saved here. Use ⋯ to
+              download a month's .txt report or delete it.
+            </p>
+            <ul id="historyList" class="history-list"></ul>
+            <p id="historyEmpty" class="empty" hidden>
+              No finished months yet. Your first report appears when next month
+              starts.
+            </p>
+          </section>
         </div>
       </div>
 
@@ -412,17 +399,30 @@
             </li>
             <li>
               Your budget is saved in this browser only. Weekly actuals clear
-              when a new month starts.
+              when a new month starts, after the finished month is saved to
+              Monthly history.
             </li>
           </ul>
         </div>
-        <button
-          type="button"
-          id="resetAll"
-          class="button button-quiet button-small"
-        >
-          Erase everything
-        </button>
+        <div class="footer-actions">
+          <div class="footer-buttons">
+            <button type="button" id="backupButton" class="button button-outline button-small">
+              Back up
+            </button>
+            <button type="button" id="restoreButton" class="button button-outline button-small">
+              Restore backup
+            </button>
+            <button
+              type="button"
+              id="resetAll"
+              class="button button-quiet button-small"
+            >
+              Erase everything
+            </button>
+          </div>
+          <p class="hint" id="backupStatus"></p>
+          <input type="file" id="restoreFile" accept=".json,application/json" hidden />
+        </div>
       </footer>
     </div>
 

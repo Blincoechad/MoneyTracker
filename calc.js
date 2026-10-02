@@ -18,9 +18,6 @@ const TIMES_PER_YEAR = {
   yearly: 1,
 };
 
-// The average month has 52 weeks ÷ 12 months = 4.333… weeks.
-const AVERAGE_WEEKS_PER_MONTH = 52 / 12;
-
 /* ---------------------------------------------------------------------
    1. SAFE NUMBER PARSING
    Text from an <input> is always a string. "$1,250.50" must become 1250.5,
@@ -49,56 +46,43 @@ function moneyOrZero(rawText) {
 
 /* ---------------------------------------------------------------------
    2. FREQUENCY CONVERSION
-   Any amount × (times per year) ÷ 12 = the monthly equivalent.
-     $40 weekly   → 40 × 52 ÷ 12 = $173.33 / month
+   Weekly amounts follow the real number of weeks in this month, so they
+   match the income side (a 5-week month pays 5 times and costs 5 times):
+     $40 weekly, 5-week month → 40 × 5 = $200 / month
+   Everything else uses amount × (times per year) ÷ 12:
      $100 biweekly→ 100 × 26 ÷ 12 = $216.67 / month
      $600 yearly  → 600 × 1 ÷ 12 = $50 / month
    --------------------------------------------------------------------- */
-function toMonthly(amount, frequency) {
+function toMonthly(amount, frequency, weeksInMonth) {
+  if (frequency === "weekly") return amount * weeksInMonth;
   const timesPerYear = TIMES_PER_YEAR[frequency] ?? 12;
   return (amount * timesPerYear) / 12;
 }
 
-function monthlyExpenseTotal(expenses) {
-  return expenses.reduce((total, expense) => total + toMonthly(moneyOrZero(expense.amount), expense.frequency), 0);
+function monthlyExpenseTotal(expenses, weeksInMonth) {
+  return expenses.reduce((total, expense) => total + toMonthly(moneyOrZero(expense.amount), expense.frequency, weeksInMonth), 0);
 }
 
 // Savings is only ever weekly or monthly, so it reuses the same converter.
-function monthlySavingsTotal(savings) {
-  return toMonthly(moneyOrZero(savings.amount), savings.frequency);
+function monthlySavingsTotal(savings, weeksInMonth) {
+  return toMonthly(moneyOrZero(savings.amount), savings.frequency, weeksInMonth);
 }
 
 /* ---------------------------------------------------------------------
    3. WHICH WEEKS BELONG TO THIS MONTH
-   Two ways to count, chosen by the user:
-
-   "average" — the month is 4.333 weeks long, like the ×52÷12 rule.
-     We track 4 real weeks (days 1–7, 8–14, 15–21, 22–end) and add the
-     leftover 0.333 week at your expected rate. With no actuals entered
-     this gives exactly Weekly × 52 ÷ 12.
-
-   "paydays" — count the actual paydays that fall in this calendar month
-     (some months have 4 Fridays, some have 5). No leftover fraction.
+   One week per payday that falls in this calendar month. A month with
+   4 Fridays has 4 weeks; a month with 5 Fridays has 5 weeks.
    --------------------------------------------------------------------- */
-function buildWeeks(year, monthIndex, mode, paydayWeekday) {
+function buildWeeks(year, monthIndex, paydayWeekday) {
   const lastDay = new Date(year, monthIndex + 1, 0).getDate();
   const weeks = [];
-
-  if (mode === "paydays") {
-    for (let day = 1; day <= lastDay; day++) {
-      const date = new Date(year, monthIndex, day);
-      if (date.getDay() === paydayWeekday) {
-        weeks.push({ key: isoDate(date), startDay: day, endDay: day, isPayday: true });
-      }
+  for (let day = 1; day <= lastDay; day++) {
+    const date = new Date(year, monthIndex, day);
+    if (date.getDay() === paydayWeekday) {
+      weeks.push({ key: isoDate(date), startDay: day, endDay: day });
     }
-    return { weeks, extraWeeks: 0 };
   }
-
-  const ranges = [[1, 7], [8, 14], [15, 21], [22, lastDay]];
-  ranges.forEach(([startDay, endDay], index) => {
-    weeks.push({ key: `avg-${index + 1}`, startDay, endDay, isPayday: false });
-  });
-  return { weeks, extraWeeks: AVERAGE_WEEKS_PER_MONTH - 4 };
+  return weeks;
 }
 
 // Which week are we in today? Weeks before this one are treated as finished.
@@ -159,10 +143,10 @@ function calculateBudget(state, today) {
   const expectedWeekly = moneyOrZero(state.expectedWeekly);
 
   // --- Month structure ---
-  const { weeks, extraWeeks } = buildWeeks(today.getFullYear(), today.getMonth(), state.weekMode, Number(state.paydayWeekday));
+  const weeks = buildWeeks(today.getFullYear(), today.getMonth(), Number(state.paydayWeekday));
   const autoWeekIndex = findCurrentWeekIndex(weeks, today.getDate());
   const currentWeekIndex = state.currentWeek === "auto" ? autoWeekIndex : Math.min(Number(state.currentWeek), weeks.length);
-  const weeksInMonth = weeks.length + extraWeeks; // 4.333 or the payday count
+  const weeksInMonth = weeks.length; // 4 or 5
 
   const resolvedWeeks = resolveWeeks(weeks, state.actuals, expectedWeekly, currentWeekIndex);
 
@@ -170,10 +154,9 @@ function calculateBudget(state, today) {
   const baselineMonthlyIncome = expectedWeekly * weeksInMonth;
 
   // --- Projection (actuals where entered, expected everywhere else) ---
-  const extraWeekIncome = extraWeeks * expectedWeekly;
-  const projectedIncome = resolvedWeeks.reduce((sum, week) => sum + week.amountUsed, 0) + extraWeekIncome;
-  const monthlyExpenses = monthlyExpenseTotal(state.expenses);
-  const monthlySavings = monthlySavingsTotal(state.savings);
+  const projectedIncome = resolvedWeeks.reduce((sum, week) => sum + week.amountUsed, 0);
+  const monthlyExpenses = monthlyExpenseTotal(state.expenses, weeksInMonth);
+  const monthlySavings = monthlySavingsTotal(state.savings, weeksInMonth);
   const projectedRemaining = projectedIncome - monthlyExpenses - monthlySavings;
 
   // --- Minimum weekly income (break-even if every week paid the same) ---
@@ -187,7 +170,7 @@ function calculateBudget(state, today) {
   const openWeekCount = openWeeks.length;
 
   const incomeReceived = closedWeeks.reduce((sum, week) => sum + week.amountUsed, 0);
-  const expectedStillToCome = openWeekCount * expectedWeekly + extraWeekIncome;
+  const expectedStillToCome = openWeekCount * expectedWeekly;
 
   // How far actual weeks are from the plan. Positive = behind, negative = ahead.
   const shortfallVsPlan = resolvedWeeks
@@ -195,7 +178,7 @@ function calculateBudget(state, today) {
     .reduce((sum, week) => sum + (week.expected - week.actual), 0);
 
   // What the open weeks must produce so the month ends at exactly $0.
-  const stillRequired = Math.max(0, requiredMonthlyIncome - incomeReceived - extraWeekIncome);
+  const stillRequired = Math.max(0, requiredMonthlyIncome - incomeReceived);
 
   const hasOpenWeeks = openWeekCount > 0;
   const breakEvenPerOpenWeek = hasOpenWeeks ? stillRequired / openWeekCount : null;
@@ -206,7 +189,6 @@ function calculateBudget(state, today) {
   return {
     expectedWeekly,
     weeks: resolvedWeeks,
-    extraWeeks,
     weeksInMonth,
     currentWeekIndex,
     autoWeekIndex,
@@ -226,7 +208,6 @@ function calculateBudget(state, today) {
     completedWeekCount: closedWeeks.length,
     incomeReceived,
     expectedStillToCome,
-    extraWeekIncome,
     shortfallVsPlan,
     stillRequired,
     breakEvenPerOpenWeek,
@@ -237,12 +218,12 @@ function calculateBudget(state, today) {
     expenseLines: state.expenses.map((expense) => ({
       id: expense.id,
       name: expense.name.trim() || "Unnamed expense",
-      monthly: toMonthly(moneyOrZero(expense.amount), expense.frequency),
+      monthly: toMonthly(moneyOrZero(expense.amount), expense.frequency, weeksInMonth),
     })),
   };
 }
 
 // Lets Node load this file for testing; browsers simply skip this line.
 if (typeof module !== "undefined") {
-  module.exports = { parseMoney, toMonthly, buildWeeks, resolveWeeks, calculateBudget, AVERAGE_WEEKS_PER_MONTH };
+  module.exports = { parseMoney, toMonthly, buildWeeks, resolveWeeks, calculateBudget };
 }

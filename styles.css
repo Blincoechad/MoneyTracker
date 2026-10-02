@@ -358,7 +358,6 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 .week-bar-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--marker); transition: left 0.25s ease; }
 .week-diff { text-align: right; font-family: var(--font-num); font-size: 0.86rem; font-weight: 600; }
 .week-diff small { display: block; font-weight: 400; color: var(--muted); font-size: 0.72rem; }
-.extra-week { padding-top: 8px; border-top: 1px dashed var(--line); }
 
 /* ---------- Expense rows ---------- */
 .expense-header, .expense-row {
@@ -444,6 +443,8 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 }
 .footer h2 { font-size: 0.86rem; color: var(--ink); margin-bottom: 6px; }
 .footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; max-width: 75ch; }
+.footer-actions { display: grid; gap: 6px; justify-items: end; }
+.footer-buttons { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* ---------- Sticky summary (appears when the hero scrolls away) ---------- */
 .sticky-summary {
@@ -489,3 +490,16 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ---------- Monthly history ---------- */
+.history-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.history-pill { position: relative; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 16px; background: var(--accent-soft); border-radius: 999px; }
+.history-month { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-total { font-family: var(--font-num); font-weight: 600; color: var(--accent); }
+.history-menu-button { width: 32px; height: 32px; flex: none; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font-size: 1.2rem; line-height: 1; cursor: pointer; }
+.history-menu-button:hover, .history-pill.is-open .history-menu-button { background: var(--surface); }
+.history-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 10; min-width: 190px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); display: grid; }
+.history-menu[hidden] { display: none; }
+.history-menu button { text-align: left; padding: 8px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-size: 0.9rem; cursor: pointer; }
+.history-menu button:hover { background: var(--surface-2); }
+.history-menu .is-danger { color: var(--bad); }
