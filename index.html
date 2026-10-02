@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Personal Budget Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!--
+  index.html — THE STRUCTURE LAYER
+  This file only describes what is on the page. It holds no math.
+  Elements the JavaScript needs to read or update get an id (or a data- attribute),
+  so app.js can find them with document.getElementById(...).
+-->
+
+    <div id="stickySummary" class="sticky-summary" hidden aria-hidden="true">
+      <span id="stickyStatus" class="pill">Positive</span>
+      <span class="sticky-figure">
+        <span class="sticky-label">Remaining</span>
+        <strong id="stickyRemaining">$0.00</strong>
+      </span>
+      <span class="sticky-figure">
+        <span class="sticky-label">Min / week</span>
+        <strong id="stickyMinimum">$0.00</strong>
+      </span>
+    </div>
+
+    <div class="page">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="monthLabel">This month</p>
+          <h1>Personal Budget</h1>
+        </div>
+        <button type="button" id="whatIfToggle" class="button button-outline">
+          Try a what-if
+        </button>
+      </header>
+
+      <div id="exampleBanner" class="notice" hidden>
+        <p>
+          <strong>These are example numbers</strong>
+          , not yours. Edit any of them, or start from zero.
+        </p>
+        <div class="notice-actions">
+          <button type="button" id="startBlank" class="button button-small">
+            Start with a blank budget
+          </button>
+          <button
+            type="button"
+            id="keepExample"
+            class="button button-small button-quiet"
+          >
+            Keep and edit them
+          </button>
+        </div>
+      </div>
+
+      <p id="monthNotice" class="notice notice-plain" hidden></p>
+
+      <div id="whatIfBar" class="whatif-bar" hidden>
+        <p>
+          <strong>What-if mode.</strong>
+          Change anything below. Your saved budget stays untouched until you
+          keep the changes.
+        </p>
+        <div class="notice-actions">
+          <button type="button" id="applyScenario" class="button button-small">
+            Keep these changes
+          </button>
+          <button
+            type="button"
+            id="discardScenario"
+            class="button button-small button-quiet"
+          >
+            Discard what-if
+          </button>
+        </div>
+      </div>
+
+      <!-- ===================== SUMMARY: the answer first ===================== -->
+      <section class="hero" id="hero" aria-live="polite">
+        <div class="hero-status">
+          <div class="hero-head">
+            <span id="statusPill" class="pill">Positive</span>
+            <span class="eyebrow">Projected remaining this month</span>
+          </div>
+          <p id="heroRemaining" class="hero-number">$0.00</p>
+          <p id="heroDelta" class="hero-delta" hidden></p>
+          <p id="heroEquation" class="equation"></p>
+          <p id="heroMessage" class="hero-message"></p>
+        </div>
+
+        <dl class="kpis">
+          <div class="kpi">
+            <dt>Expected weekly income</dt>
+            <dd id="kpiExpectedWeekly">$0.00</dd>
+            <p class="kpi-sub" id="kpiExpectedWeeklySub">Your baseline</p>
+          </div>
+          <div class="kpi">
+            <dt>Projected monthly income</dt>
+            <dd id="kpiIncome">$0.00</dd>
+            <p class="kpi-sub" id="kpiIncomeSub"></p>
+          </div>
+          <div class="kpi">
+            <dt>Monthly expenses</dt>
+            <dd id="kpiExpenses">$0.00</dd>
+            <p class="kpi-sub" id="kpiExpensesSub"></p>
+          </div>
+          <div class="kpi">
+            <dt>Planned savings</dt>
+            <dd id="kpiSavings">$0.00</dd>
+            <p class="kpi-sub" id="kpiSavingsSub"></p>
+          </div>
+          <div class="kpi">
+            <dt>Minimum weekly income needed</dt>
+            <dd id="kpiMinimum">$0.00</dd>
+            <p class="kpi-sub" id="kpiMinimumSub"></p>
+          </div>
+          <div class="kpi">
+            <dt>Recovery needed this month</dt>
+            <dd id="kpiRecovery">$0.00</dd>
+            <p class="kpi-sub" id="kpiRecoverySub"></p>
+          </div>
+        </dl>
+      </section>
+
+      <div class="layout">
+        <!-- ===================== LEFT: everything you type ===================== -->
+        <div class="column">
+          <section class="panel" aria-labelledby="incomeHeading">
+            <h2 id="incomeHeading">Income</h2>
+
+            <div class="field">
+              <label for="expectedWeekly">Expected weekly take-home</label>
+              <div class="money-input">
+                <span aria-hidden="true">$</span>
+                <input
+                  id="expectedWeekly"
+                  data-field="expectedWeekly"
+                  type="text"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  placeholder="0.00"
+                />
+              </div>
+              <p class="field-error" id="expectedWeeklyError" role="alert"></p>
+              <p class="hint">
+                Your normal week. Every week you haven't filled in below uses
+                this amount.
+              </p>
+            </div>
+
+            <fieldset class="field">
+              <legend>Count this month as</legend>
+              <div class="segmented">
+                <input
+                  type="radio"
+                  name="weekMode"
+                  id="weekModeAverage"
+                  value="average"
+                />
+                <label for="weekModeAverage">
+                  Average month
+                  <small>4.33 weeks (× 52 ÷ 12)</small>
+                </label>
+                <input
+                  type="radio"
+                  name="weekMode"
+                  id="weekModePaydays"
+                  value="paydays"
+                />
+                <label for="weekModePaydays">
+                  My paydays
+                  <small id="paydayCountLabel">this month</small>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="field-row">
+              <div class="field" id="paydayField">
+                <label for="paydayWeekday">Payday</label>
+                <select id="paydayWeekday">
+                  <option value="0">Sunday</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="currentWeek">Current week</label>
+                <select id="currentWeek"></select>
+              </div>
+            </div>
+
+            <details class="explain">
+              <summary>How monthly income is calculated</summary>
+              <div id="incomeExplain"></div>
+            </details>
+          </section>
+
+          <section class="panel" aria-labelledby="weeksHeading">
+            <div class="panel-head">
+              <h2 id="weeksHeading">Weeks this month</h2>
+              <ul class="legend" aria-label="Legend">
+                <li>
+                  <span class="swatch swatch-above"></span>
+                  Above expected
+                </li>
+                <li>
+                  <span class="swatch swatch-below"></span>
+                  Below
+                </li>
+                <li>
+                  <span class="swatch swatch-marker"></span>
+                  Expected
+                </li>
+              </ul>
+            </div>
+            <p class="hint">
+              Type what you actually made. Leave a week blank and it counts at
+              your expected amount.
+            </p>
+            <div id="weekList" class="week-list"></div>
+            <p id="extraWeekNote" class="hint extra-week" hidden></p>
+          </section>
+
+          <section class="panel" aria-labelledby="expensesHeading">
+            <div class="panel-head">
+              <h2 id="expensesHeading">Bills &amp; expenses</h2>
+              <p class="panel-total">
+                <span id="expenseTotal">$0.00</span>
+                / month
+              </p>
+            </div>
+            <div class="expense-header" aria-hidden="true">
+              <span>Name</span>
+              <span>Amount</span>
+              <span>How often</span>
+              <span>Per month</span>
+              <span></span>
+            </div>
+            <div id="expenseList" class="expense-list"></div>
+            <p id="expenseEmpty" class="empty" hidden>
+              No expenses yet. Add your rent, phone, gas, food, and anything
+              else you pay.
+            </p>
+            <button
+              type="button"
+              id="addExpense"
+              class="button button-outline add-button"
+            >
+              + Add expense
+            </button>
+          </section>
+
+          <section class="panel" aria-labelledby="savingsHeading">
+            <h2 id="savingsHeading">Savings goal</h2>
+            <div class="field-row">
+              <div class="field">
+                <label for="savingsAmount">Amount to save</label>
+                <div class="money-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    id="savingsAmount"
+                    data-field="savingsAmount"
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    placeholder="0.00"
+                  />
+                </div>
+                <p class="field-error" id="savingsAmountError" role="alert"></p>
+              </div>
+              <fieldset class="field">
+                <legend>Every</legend>
+                <div class="segmented segmented-compact">
+                  <input
+                    type="radio"
+                    name="savingsFrequency"
+                    id="savingsWeekly"
+                    value="weekly"
+                  />
+                  <label for="savingsWeekly">Week</label>
+                  <input
+                    type="radio"
+                    name="savingsFrequency"
+                    id="savingsMonthly"
+                    value="monthly"
+                  />
+                  <label for="savingsMonthly">Month</label>
+                </div>
+              </fieldset>
+            </div>
+            <p class="hint" id="savingsExplain"></p>
+          </section>
+        </div>
+
+        <!-- ===================== RIGHT: what it means ===================== -->
+        <div class="column">
+          <section class="panel" aria-labelledby="recoveryHeading">
+            <h2 id="recoveryHeading">Recovery</h2>
+            <div id="recoveryHeadline" class="recovery-headline"></div>
+            <dl id="recoveryFacts" class="facts"></dl>
+          </section>
+
+          <section class="panel" aria-labelledby="minimumHeading">
+            <h2 id="minimumHeading">Minimum weekly income</h2>
+            <dl class="trio">
+              <div>
+                <dt>Needed to break even</dt>
+                <dd id="minNeeded">$0.00</dd>
+              </div>
+              <div>
+                <dt>You expect</dt>
+                <dd id="minExpected">$0.00</dd>
+              </div>
+              <div>
+                <dt>Weekly buffer</dt>
+                <dd id="minBuffer">$0.00</dd>
+              </div>
+            </dl>
+            <div class="meter" id="minMeter" aria-hidden="true">
+              <div class="meter-fill" id="minMeterFill"></div>
+              <div class="meter-marker" id="minMeterMarker">
+                <span>Minimum</span>
+              </div>
+            </div>
+            <details class="explain">
+              <summary>How the minimum is calculated</summary>
+              <div id="minimumExplain"></div>
+            </details>
+          </section>
+
+          <section class="panel" aria-labelledby="flowHeading">
+            <h2 id="flowHeading">Where this month's income goes</h2>
+            <div class="flow" id="flowChart">
+              <div class="flow-track" id="flowTrack"></div>
+              <div class="flow-scale" id="flowScale"></div>
+            </div>
+            <ul class="legend flow-legend">
+              <li>
+                <span class="swatch swatch-expenses"></span>
+                Expenses
+              </li>
+              <li>
+                <span class="swatch swatch-savings"></span>
+                Savings
+              </li>
+              <li>
+                <span class="swatch swatch-remaining"></span>
+                Remaining
+              </li>
+              <li>
+                <span class="swatch swatch-short"></span>
+                Shortfall
+              </li>
+            </ul>
+            <div class="table-wrap">
+              <table class="breakdown">
+                <thead>
+                  <tr>
+                    <th scope="col">Monthly breakdown</th>
+                    <th scope="col">This month</th>
+                    <th scope="col">Per week</th>
+                  </tr>
+                </thead>
+                <tbody id="breakdownBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="expenseBarsHeading">
+            <h2 id="expenseBarsHeading">Expenses by monthly cost</h2>
+            <div id="expenseBars" class="hbars"></div>
+          </section>
+        </div>
+      </div>
+
+      <footer class="footer">
+        <div>
+          <h2>Assumptions</h2>
+          <ul>
+            <li>
+              All amounts are take-home money. Nothing is taxed or rounded
+              except to the cent.
+            </li>
+            <li>
+              Projection = actual weeks where you entered them, expected income
+              for every other week.
+            </li>
+            <li>
+              Recovery is only spread across weeks that are still ahead of you.
+              Past weeks left blank are assumed to have paid your expected
+              amount.
+            </li>
+            <li>
+              Savings is taken out of what's left, but it is not counted as an
+              expense.
+            </li>
+            <li>
+              Your budget is saved in this browser only. Weekly actuals clear
+              when a new month starts.
+            </li>
+          </ul>
+        </div>
+        <button
+          type="button"
+          id="resetAll"
+          class="button button-quiet button-small"
+        >
+          Erase everything
+        </button>
+      </footer>
+    </div>
+
+    <script src="calc.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
