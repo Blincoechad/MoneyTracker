@@ -94,12 +94,81 @@ function activeState() {
 function saveState() {
   try {
     const json = JSON.stringify(baseline);
-    // Skipping unchanged writes stops two open tabs from echoing saves back and forth.
-    if (localStorage.getItem(STORAGE_KEY) !== json) localStorage.setItem(STORAGE_KEY, json);
+    // Skipping unchanged writes stops two open tabs (or two devices) echoing saves back and forth.
+    if (localStorage.getItem(STORAGE_KEY) === json) return;
+    localStorage.setItem(STORAGE_KEY, json);
   } catch (error) {
-    /* storage unavailable — keep working without it */
+    return; /* storage unavailable — keep working without it */
+  }
+  localChanged("budget");
+}
+
+/* ---------- Cloud sync hooks ----------
+   sync.js (Firebase) keeps this device and your cloud copy in step. It sets
+   window.budgetCloud once you're signed in, and calls window.budgetApp to
+   read or replace the data here. Signed out, or with no sync.js, the app
+   simply runs from browser storage.
+
+   Each part ("budget" and "history") carries the time it was last changed.
+   Whichever side changed more recently wins; example numbers count as never changed. */
+
+const UPDATED_KEY = "personal-budget-dashboard-updated";
+
+function readUpdated() {
+  try {
+    return JSON.parse(localStorage.getItem(UPDATED_KEY)) || {};
+  } catch (error) {
+    return {};
   }
 }
+
+function markUpdated(part, time) {
+  try {
+    localStorage.setItem(UPDATED_KEY, JSON.stringify({ ...readUpdated(), [part]: time }));
+  } catch (error) {
+    /* storage unavailable */
+  }
+}
+
+// Called whenever this device saves a change.
+function localChanged(part) {
+  markUpdated(part, Date.now());
+  window.budgetCloud?.push(part);
+}
+
+window.budgetApp = {
+  getLocal() {
+    const updated = readUpdated();
+    return {
+      budget: JSON.stringify(baseline),
+      budgetUpdatedAt: baseline.isExample ? 0 : updated.budget ?? 0,
+      history: JSON.stringify(loadHistory()),
+      historyUpdatedAt: updated.history ?? 0,
+    };
+  },
+
+  // Replace this device's copy with the newer one from the cloud.
+  applyRemote(part, json, updatedAt) {
+    try {
+      localStorage.setItem(part === "budget" ? STORAGE_KEY : HISTORY_KEY, json);
+    } catch (error) {
+      return;
+    }
+    markUpdated(part, updatedAt);
+
+    if (part === "history") {
+      renderHistory();
+      return;
+    }
+    baseline = loadState() ?? baseline;
+    // Store the cleaned-up copy so the next save sees no change and doesn't send it back.
+    // (If the cloud copy was from last month, loadState just reset it; that IS a change, so it's left to save.)
+    if (!closedMonth) localStorage.setItem(STORAGE_KEY, JSON.stringify(baseline));
+    archiveClosedMonth();
+    if (scenario) refresh();
+    else renderInputs();
+  },
+};
 
 function loadState() {
   let saved = null;
@@ -654,8 +723,9 @@ function saveHistory(history) {
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   } catch (error) {
-    /* storage unavailable — history won't survive a reload */
+    return; /* storage unavailable — history won't survive a reload */
   }
+  localChanged("history");
 }
 
 function monthName(monthKey) {
@@ -1053,6 +1123,7 @@ $("restoreFile").addEventListener("change", async (event) => {
     monthNoticeText = `Restored your backup from ${new Date(backup.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`;
   }
   renderInputs(); // also saves
+  localChanged("budget"); // the save above may see no change, since the file was written straight to storage
   renderHistory();
   renderBackupStatus();
 });

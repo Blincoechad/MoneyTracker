@@ -5,7 +5,7 @@
 # ~/Library/LaunchAgents/com.chadblincoe.budget-pay-reminder.plist (copy in this folder).
 
 BROWSER="Safari" # the browser that holds your budget
-APP="$(cd "$(dirname "$0")/.." && pwd)/index.html"
+APP_URL="https://blincoechad.github.io/MoneyTracker/" # the online version, which syncs
 message="How much did you make this week?"
 
 while true; do
@@ -23,9 +23,9 @@ APPLESCRIPT
   message="\"$answer\" isn't an amount. Type a number like 275 or 275.50."
 done
 
-# Not `open -a`: it drops the ?pay= part from file:// links. Asking the browser
-# directly keeps it. macOS asks once to allow controlling the browser.
-osascript - "$BROWSER" "file://${APP// /%20}?pay=$amount" <<'APPLESCRIPT'
+# Asking the browser directly (not `open -a`) keeps the ?pay= part intact.
+# macOS asks once to allow controlling the browser.
+osascript - "$BROWSER" "${APP_URL}?pay=$amount" <<'APPLESCRIPT'
 on run argv
   tell application (item 1 of argv)
     activate

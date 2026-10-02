@@ -41,9 +41,17 @@
           <p class="eyebrow" id="monthLabel">This month</p>
           <h1>Personal Budget</h1>
         </div>
-        <button type="button" id="whatIfToggle" class="button button-outline">
-          Try a what-if
-        </button>
+        <div class="topbar-actions">
+          <div id="syncArea" class="sync" hidden>
+            <span id="syncStatus" class="sync-status" aria-live="polite"></span>
+            <button type="button" id="syncButton" class="button button-outline button-small">
+              Sign in to sync
+            </button>
+          </div>
+          <button type="button" id="whatIfToggle" class="button button-outline">
+            Try a what-if
+          </button>
+        </div>
       </header>
 
       <div id="exampleBanner" class="notice" hidden>
@@ -428,5 +436,7 @@
 
     <script src="calc.js"></script>
     <script src="app.js"></script>
+    <!-- Cloud sync. Only runs from a web address (not a file on disk) once firebase-config.js is filled in. -->
+    <script type="module" src="sync.js"></script>
   </body>
 </html>
