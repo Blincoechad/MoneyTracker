@@ -166,6 +166,8 @@
           <p class="hint">Each paycheck pays the bills due before the next one. Tap a bill to mark it paid.</p>
         </div>
         <div id="weekList" class="paycheck-list"></div>
+        <!-- Phones only: the list starts folded to this week's paycheck -->
+        <button type="button" id="paychecksToggle" class="button button-outline button-small paychecks-toggle" aria-controls="weekList" aria-expanded="false"></button>
       </section>
 
       <div class="layout">

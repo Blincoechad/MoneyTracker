@@ -539,6 +539,7 @@ function billListHtml(plan, state) {
 function renderWeeks(r, state) {
   const statusText = { actual: "Actual", assumed: "Past · assumed", open: "Upcoming" };
   const thisWeek = latestPaydayWeek(r.weeks);
+  const focusWeek = thisWeek ?? r.weeks[0]; // the card a folded list shows on phones
 
   r.weeks.forEach((week, i) => {
     const card = document.querySelector(`[data-week-row="${week.index}"]`);
@@ -546,6 +547,7 @@ function renderWeeks(r, state) {
     const plan = r.paychecks[i];
     const isThisWeek = week === thisWeek;
     card.classList.toggle("is-current", isThisWeek);
+    card.classList.toggle("is-focus", week === focusWeek);
     card.classList.toggle("is-short", plan.left < -0.005);
 
     const status = card.querySelector('[data-role="status"]');
@@ -580,8 +582,23 @@ function renderWeeks(r, state) {
   const monthName = new Date().toLocaleDateString("en-US", { month: "long" });
   const count = r.weeks.length;
   $("weeksHeading").textContent = `${count} paychecks in ${monthName}`;
+  renderPaychecksToggle(count);
   $("weekCountHint").textContent = `${monthName} has ${count} ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}, so this is a ${count}-week month.`;
 }
+
+// On phones the paycheck list folds to this week's card; this button opens the rest.
+let paychecksExpanded = false;
+
+function renderPaychecksToggle(count) {
+  $("weekList").classList.toggle("is-expanded", paychecksExpanded);
+  $("paychecksToggle").setAttribute("aria-expanded", String(paychecksExpanded));
+  $("paychecksToggle").textContent = paychecksExpanded ? "Show only this week ▴" : `Show all ${count} paychecks ▾`;
+}
+
+$("paychecksToggle").addEventListener("click", () => {
+  paychecksExpanded = !paychecksExpanded;
+  renderPaychecksToggle(calculate(activeState()).weeks.length);
+});
 
 function renderExpenseMonthly(r) {
   r.expenseLines.forEach((line) => {

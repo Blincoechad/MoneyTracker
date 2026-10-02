@@ -593,3 +593,10 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 @media (max-width: 760px) {
   .this-week { grid-template-columns: minmax(0, 1fr); row-gap: 16px; }
 }
+
+/* Phones: fold the paycheck list to this week's card until "Show all" is tapped */
+.paychecks-toggle { display: none; justify-self: center; }
+@media (max-width: 640px) {
+  .paychecks-toggle { display: inline-block; }
+  .paycheck-list:not(.is-expanded) .paycheck:not(.is-focus) { display: none; }
+}
