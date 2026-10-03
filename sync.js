@@ -23,6 +23,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, onSnapshot, setDoc,
+  terminate, clearIndexedDbPersistence,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 const PARTS = ["budget", "history"];
@@ -64,7 +65,17 @@ function start() {
 
   syncButton.addEventListener("click", async () => {
     if (auth.currentUser) {
+      // Sign out, then wipe this device: the budget (back to $0) and Firestore's offline copy.
+      setStatus("Signing out…");
       await signOut(auth);
+      window.budgetApp.resetForSignOut();
+      try {
+        await terminate(db);
+        await clearIndexedDbPersistence(db);
+      } catch (error) {
+        console.error(error);
+      }
+      location.reload(); // start fresh, signed out
       return;
     }
     try {
@@ -125,6 +136,16 @@ function start() {
         // and our own unsent edits echo back here too.
         if (snapshot.metadata.hasPendingWrites || snapshot.metadata.fromCache) return;
         const remote = snapshot.data() ?? {};
+
+        // First sign-in after signing out on this device: the cloud copy wins outright,
+        // so anything typed while signed out can't overwrite your real budget.
+        if (window.budgetApp.isCloudFirst()) {
+          for (const part of PARTS) {
+            if (remote[part] !== undefined) window.budgetApp.applyRemote(part, remote[part], remote[`${part}UpdatedAt`] ?? 0);
+          }
+          window.budgetApp.clearCloudFirst();
+        }
+
         const local = window.budgetApp.getLocal();
 
         for (const part of PARTS) {

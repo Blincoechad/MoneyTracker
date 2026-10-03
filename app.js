@@ -123,6 +123,8 @@ function saveState() {
    Whichever side changed more recently wins; example numbers count as never changed. */
 
 const UPDATED_KEY = "personal-budget-dashboard-updated";
+// Set when you sign out: the next sign-in takes the cloud copy whole, whatever this device did meanwhile.
+const CLOUD_FIRST_KEY = "personal-budget-dashboard-cloud-first";
 
 function readUpdated() {
   try {
@@ -147,6 +149,40 @@ function localChanged(part) {
 }
 
 window.budgetApp = {
+  // Signing out wipes this device's copy, so nobody else using it can see your numbers.
+  // Your data stays in the cloud and comes back when you sign in again.
+  resetForSignOut() {
+    baseline = createBlankState();
+    scenario = null;
+    monthNoticeText = "";
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(baseline));
+      localStorage.setItem(HISTORY_KEY, "[]");
+      localStorage.setItem(UPDATED_KEY, JSON.stringify({ budget: 0, history: 0 }));
+      localStorage.setItem(CLOUD_FIRST_KEY, "1");
+    } catch (error) {
+      /* storage unavailable */
+    }
+    renderInputs(); // saves nothing new: what's stored already matches
+    renderHistory();
+  },
+
+  isCloudFirst() {
+    try {
+      return localStorage.getItem(CLOUD_FIRST_KEY) === "1";
+    } catch (error) {
+      return false;
+    }
+  },
+
+  clearCloudFirst() {
+    try {
+      localStorage.removeItem(CLOUD_FIRST_KEY);
+    } catch (error) {
+      /* storage unavailable */
+    }
+  },
+
   getLocal() {
     const updated = readUpdated();
     return {
