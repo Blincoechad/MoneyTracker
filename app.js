@@ -1536,6 +1536,39 @@ if ("IntersectionObserver" in window) {
   }).observe($("hero"));
 }
 
+/* ---------- Look: Classic ↔ Glass ----------
+   Only the look changes (styles.css, :root[data-style="glass"]); every feature stays the same.
+   The choice is a per-device convenience, so it lives in this browser, not the synced budget. */
+
+const STYLE_KEY = "personal-budget-dashboard-style";
+const themeColorMetas = [...document.querySelectorAll('meta[name="theme-color"]')];
+themeColorMetas.forEach((meta) => (meta.dataset.classic = meta.content));
+
+function applyStyle(style) {
+  const glass = style === "glass";
+  if (glass) document.documentElement.dataset.style = "glass";
+  else delete document.documentElement.dataset.style;
+  $("styleSwitch").setAttribute("aria-checked", String(glass));
+  themeColorMetas.forEach((meta) => (meta.content = glass ? "#f1ecff" : meta.dataset.classic));
+}
+
+$("styleSwitch").addEventListener("click", () => {
+  const next = document.documentElement.dataset.style === "glass" ? "classic" : "glass";
+  // A short cross-fade between looks (skipped for people who prefer less motion).
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.documentElement.classList.add("is-restyling");
+    setTimeout(() => document.documentElement.classList.remove("is-restyling"), 450);
+  }
+  applyStyle(next);
+  try {
+    localStorage.setItem(STYLE_KEY, next);
+  } catch (error) {
+    /* storage unavailable — the look still changes for this visit */
+  }
+});
+
+applyStyle(document.documentElement.dataset.style === "glass" ? "glass" : "classic");
+
 /* ---------- Start ---------- */
 // Budget settings start folded once you're set up; open while setting up or using the example.
 $("settingsDetails").open = baseline.isExample || moneyOrZero(baseline.expectedWeekly) === 0;

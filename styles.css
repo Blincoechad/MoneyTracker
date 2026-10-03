@@ -695,3 +695,278 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
   .kpi-part .kpi-sub { grid-column: 1; }
   .kpi-edit { grid-column: 1 / -1; }
 }
+
+/* =====================================================================
+   STYLE SWITCH (both looks) — the slider beside "Personal Budget"
+   ===================================================================== */
+.title-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.style-switch {
+  display: inline-flex; align-items: center; gap: 8px; padding: 2px; border: 0; background: none;
+  font: inherit; color: var(--muted); cursor: pointer;
+}
+.style-switch:focus-visible { outline: none; }
+.style-switch:focus-visible .style-switch-track { outline: 2px solid var(--accent); outline-offset: 3px; }
+.style-switch-track {
+  position: relative; flex: none; width: 62px; height: 34px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.12); transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+.style-switch-knob {
+  position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; background: #fff; color: var(--accent);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+  transition: transform 0.4s cubic-bezier(0.3, 1.4, 0.5, 1), color 0.35s ease;
+}
+.style-icon-glass, .label-glass { display: none; }
+.style-switch[aria-checked="true"] .style-icon-classic,
+.style-switch[aria-checked="true"] .label-classic { display: none; }
+.style-switch[aria-checked="true"] .style-icon-glass { display: block; }
+.style-switch[aria-checked="true"] .label-glass { display: inline; }
+.style-switch[aria-checked="true"] .style-switch-track {
+  background: #ff8a3d; border: 2px solid #1f2a44; box-shadow: 0 3px 0 #1f2a44;
+}
+.style-switch[aria-checked="true"] .style-switch-knob { transform: translateX(26px); top: 2px; left: 2px; color: #e46a14; box-shadow: 0 0 0 2px #1f2a44; }
+.style-switch-label { font-size: 0.74rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Phones: the switch sits in the top-right corner, inside the page's 16px margin. */
+@media (max-width: 640px) {
+  .topbar { position: relative; }
+  .style-switch { position: absolute; top: -4px; right: 0; }
+  .style-switch-label { display: none; }
+}
+
+/* A short cross-fade while switching looks (added by app.js for ~0.4s). */
+.is-restyling *, .is-restyling *::before, .is-restyling *::after {
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, border-radius 0.4s ease, box-shadow 0.4s ease !important;
+}
+
+/* =====================================================================
+   GLASS LOOK — "citrus sticker": light frosted cards on warm cream paper,
+   flat fruit colors (no gradients), navy ink, chunky sticker buttons.
+   Everything below only applies with <html data-style="glass">.
+   Placed last so it wins over the Classic dark-mode tokens too.
+   ===================================================================== */
+:root[data-style="glass"] {
+  color-scheme: light;
+  /* fruit palette */
+  --tangerine: #ff8a3d;
+  --sun: #ffd23f;
+  --lime: #9ad13b;
+  --lagoon: #2ec4b6;
+  --grapefruit: #ff6b8b;
+  --blueberry: #4361ee;
+
+  --bg: #fff5e6;
+  --surface: rgb(255 255 255 / 0.62);
+  --surface-2: rgb(255 251 244 / 0.9);
+  --ink: #1f2a44;
+  --muted: #565f73;
+  --line: rgb(31 42 68 / 0.13);
+  --accent: #0a7f81;
+  --accent-ink: #ffffff;
+  --accent-soft: rgb(46 196 182 / 0.2);
+  --good: #2b7a12;
+  --good-soft: rgb(154 209 59 / 0.3);
+  --bad: #c81d38;
+  --bad-soft: rgb(255 107 139 / 0.22);
+  --expenses: var(--tangerine);
+  --savings: var(--blueberry);
+  --remaining: var(--lime);
+  --marker: var(--ink);
+  --whatif: #9a5800;
+  --whatif-soft: rgb(255 210 63 / 0.34);
+  --font-ui: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 26px;
+  --shadow: 0 20px 36px -24px rgb(130 70 10 / 0.4), 0 2px 6px rgb(31 42 68 / 0.05);
+  --glass-edge: rgb(255 255 255 / 0.92);
+  --glass-blur: blur(20px) saturate(140%);
+  --sticker: 0 3px 0 var(--ink);
+}
+
+/* Warm cream paper with a faint dot grid, and solid fruit-colored circles
+   that soften into color through the frosted cards. */
+:root[data-style="glass"] body { background: var(--bg); min-height: 100vh; font-size: 15.5px; }
+:root[data-style="glass"] body::before {
+  content: ""; position: fixed; inset: -10vmax; z-index: -1; pointer-events: none; opacity: 0.6;
+  background:
+    radial-gradient(circle at 9% 15%, var(--tangerine) 0 14vmax, transparent calc(14vmax + 1px)),
+    radial-gradient(circle at 95% 8%, var(--sun) 0 13vmax, transparent calc(13vmax + 1px)),
+    radial-gradient(circle at 86% 72%, var(--lagoon) 0 16vmax, transparent calc(16vmax + 1px)),
+    radial-gradient(circle at 14% 88%, var(--grapefruit) 0 12vmax, transparent calc(12vmax + 1px)),
+    radial-gradient(circle at 50% 46%, var(--lime) 0 8vmax, transparent calc(8vmax + 1px));
+  animation: citrus-drift 34s ease-in-out infinite alternate;
+}
+:root[data-style="glass"] body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(rgb(31 42 68 / 0.09) 1px, transparent 1.6px) 0 0 / 22px 22px;
+}
+@keyframes citrus-drift { to { transform: translate3d(2vmax, -1.5vmax, 0) rotate(4deg); } }
+@media (prefers-reduced-motion: reduce) { :root[data-style="glass"] body::before { animation: none; } }
+
+/* Type: navy ink, a highlighter stripe under the title */
+:root[data-style="glass"] .num, :root[data-style="glass"] dd,
+:root[data-style="glass"] .hero-number, :root[data-style="glass"] input[inputmode="decimal"] { font-weight: 800; }
+:root[data-style="glass"] h1 {
+  font-weight: 900; letter-spacing: -0.03em; color: var(--ink);
+  text-decoration: underline; text-decoration-color: var(--sun); text-decoration-thickness: 0.32em;
+  text-underline-offset: -0.12em; text-decoration-skip-ink: none;
+}
+:root[data-style="glass"] h2 { font-weight: 800; }
+:root[data-style="glass"] .eyebrow { color: var(--accent); font-weight: 800; }
+
+/* Frosted cards */
+:root[data-style="glass"] .panel,
+:root[data-style="glass"] .hero-status,
+:root[data-style="glass"] .kpi,
+:root[data-style="glass"] .notice,
+:root[data-style="glass"] .whatif-bar,
+:root[data-style="glass"] .paycheck {
+  background: var(--surface);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1.5px solid var(--glass-edge);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), inset 0 1px 0 rgb(255 255 255 / 0.95);
+}
+:root[data-style="glass"] .panel { padding: 20px 22px; }
+:root[data-style="glass"] .notice-plain { background: var(--surface); }
+:root[data-style="glass"] .whatif-bar { background: rgb(255 210 63 / 0.4); border: 2px dashed var(--ink); }
+:root[data-style="glass"] .is-whatif .settings,
+:root[data-style="glass"] .is-whatif .column:first-child .panel { border: 2px dashed rgb(31 42 68 / 0.55); }
+
+/* Summary card: lime when positive, grapefruit when negative — with a fruit slice in the corner */
+:root[data-style="glass"] .hero-status { position: relative; overflow: hidden; background: rgb(154 209 59 / 0.24); border-top: 1.5px solid var(--glass-edge); }
+:root[data-style="glass"] .hero.is-negative .hero-status { background: rgb(255 107 139 / 0.22); }
+:root[data-style="glass"] .hero-status > * { position: relative; z-index: 1; }
+:root[data-style="glass"] .hero-status::after {
+  content: ""; position: absolute; right: -104px; top: -104px; width: 200px; height: 200px; border-radius: 50%;
+  pointer-events: none; opacity: 0.45;
+  background:
+    radial-gradient(circle, #f7ffe4 0 14px, transparent 15px),
+    repeating-conic-gradient(var(--lime) 0 26deg, #f7ffe4 26deg 30deg);
+  box-shadow: inset 0 0 0 7px #f7ffe4, inset 0 0 0 15px #6e9f1f;
+}
+:root[data-style="glass"] .hero.is-negative .hero-status::after {
+  background:
+    radial-gradient(circle, #fff0f3 0 14px, transparent 15px),
+    repeating-conic-gradient(var(--grapefruit) 0 26deg, #fff0f3 26deg 30deg);
+  box-shadow: inset 0 0 0 7px #fff0f3, inset 0 0 0 15px #e0405e;
+}
+:root[data-style="glass"] .hero-number { font-weight: 900; color: var(--good); }
+:root[data-style="glass"] .hero.is-negative .hero-number { color: var(--bad); }
+:root[data-style="glass"] .pill { background: var(--lime); color: var(--ink); border: 2px solid var(--ink); box-shadow: 0 2px 0 var(--ink); }
+:root[data-style="glass"] .pill.is-negative { background: var(--grapefruit); color: var(--ink); }
+:root[data-style="glass"] .is-whatif .hero-status { outline: 2px dashed var(--ink); outline-offset: 4px; }
+
+/* Summary tiles: separate bubbles, each with its own fruit dot */
+:root[data-style="glass"] .kpis { background: transparent; border: 0; box-shadow: none; overflow: visible; gap: 14px; }
+:root[data-style="glass"] .kpi { padding: 16px 18px; }
+:root[data-style="glass"] .kpi dt { color: var(--ink); font-weight: 800; }
+:root[data-style="glass"] .kpi > dt::before {
+  content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 7px; border-radius: 50%;
+  background: var(--lagoon); box-shadow: 0 0 0 2px var(--ink); vertical-align: 0;
+}
+:root[data-style="glass"] .kpi:nth-child(2) > dt::before { background: var(--tangerine); }
+:root[data-style="glass"] .kpi:nth-child(3) > dt::before { background: var(--blueberry); }
+:root[data-style="glass"] .kpi-op { display: none; }
+
+/* This week: a sunny yellow card */
+:root[data-style="glass"] .this-week { border-left: 1.5px solid var(--glass-edge); background: rgb(255 210 63 / 0.3); }
+
+/* Buttons: chunky stickers that press down */
+:root[data-style="glass"] .button {
+  border: 2px solid var(--ink); border-radius: 999px; background: var(--tangerine); color: var(--ink); font-weight: 800;
+  box-shadow: var(--sticker); transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+:root[data-style="glass"] .button:hover { filter: none; transform: translateY(-1px); box-shadow: 0 4px 0 var(--ink); }
+:root[data-style="glass"] .button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+:root[data-style="glass"] .button-outline { background: #fff; color: var(--ink); }
+:root[data-style="glass"] .button-quiet { background: rgb(255 255 255 / 0.6); border-color: rgb(31 42 68 / 0.35); box-shadow: none; }
+:root[data-style="glass"] .is-whatif #whatIfToggle { background: var(--sun); color: var(--ink); }
+
+/* Inputs */
+:root[data-style="glass"] input[type="text"],
+:root[data-style="glass"] input[type="date"],
+:root[data-style="glass"] select { background: #fff; border: 2px solid rgb(31 42 68 / 0.16); border-radius: 14px; }
+:root[data-style="glass"] input[type="text"]:focus,
+:root[data-style="glass"] input[type="date"]:focus,
+:root[data-style="glass"] select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgb(46 196 182 / 0.3); }
+:root[data-style="glass"] input[aria-invalid="true"] { border-color: var(--bad); background: #fff3f5; }
+
+/* Toggles and segmented choices: the chosen one turns navy */
+:root[data-style="glass"] .segmented,
+:root[data-style="glass"] .kpi-edit-modes { border: 2px solid rgb(31 42 68 / 0.16); border-radius: 999px; background: #fff; padding: 3px; gap: 3px; }
+:root[data-style="glass"] .segmented label,
+:root[data-style="glass"] .kpi-edit-modes button { background: transparent; border: 0; border-radius: 999px; }
+:root[data-style="glass"] .segmented label + input + label,
+:root[data-style="glass"] .kpi-edit-modes button + button { border-left: 0; }
+:root[data-style="glass"] .segmented input:checked + label,
+:root[data-style="glass"] .kpi-edit-modes button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+
+/* Paycheck cards */
+:root[data-style="glass"] .paycheck { border-radius: 22px; padding: 14px 12px; background: rgb(255 255 255 / 0.6); transition: transform 0.2s ease; }
+:root[data-style="glass"] .paycheck:hover { transform: translateY(-2px) rotate(-0.3deg); }
+:root[data-style="glass"] .paycheck.is-current { border: 2.5px solid var(--accent); background: rgb(255 255 255 / 0.85); box-shadow: 0 5px 0 rgb(10 127 129 / 0.35), var(--shadow); }
+:root[data-style="glass"] .paycheck.is-short { border: 2px solid var(--bad); box-shadow: 0 5px 0 rgb(200 29 56 / 0.25), var(--shadow); }
+:root[data-style="glass"] .paycheck .week-status { background: #fff; border: 1.5px solid var(--line); }
+:root[data-style="glass"] .week-status[data-status="current"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+:root[data-style="glass"] .paycheck .week-dates { white-space: nowrap; font-size: 0.74rem; }
+:root[data-style="glass"] .paycheck .bill-check { padding: 6px 8px; }
+:root[data-style="glass"] .paycheck .bill-due { font-size: 0.72rem; }
+:root[data-style="glass"] .paycheck .bill-amount { font-size: 0.8rem; }
+:root[data-style="glass"] .paycheck-note { border-radius: 14px; }
+
+/* Bills: bubbly rows; paid ones turn lime */
+:root[data-style="glass"] .bill-check { background: rgb(255 255 255 / 0.78); border: 1.5px solid rgb(31 42 68 / 0.08); border-radius: 14px; }
+:root[data-style="glass"] .bill-check:hover { border-color: rgb(31 42 68 / 0.3); }
+:root[data-style="glass"] .bill-check.is-paid { background: rgb(154 209 59 / 0.3); border-color: rgb(110 159 31 / 0.45); }
+:root[data-style="glass"] .bill-box { border-radius: 8px; border: 2px solid rgb(31 42 68 / 0.45); background: #fff; }
+:root[data-style="glass"] .bill-check.is-paid .bill-box { background: var(--lime); border-color: var(--ink); color: var(--ink); }
+:root[data-style="glass"] .bill-check.is-paid .bill-name { color: var(--muted); }
+:root[data-style="glass"] .bill-check.is-other { background: rgb(67 97 238 / 0.07); border: 2px dashed rgb(67 97 238 / 0.55); }
+:root[data-style="glass"] .bill-check.is-other .bill-due,
+:root[data-style="glass"] .paycheck-totals .is-other dt,
+:root[data-style="glass"] .paycheck-totals .is-other dd,
+:root[data-style="glass"] .outside-list li > span:last-child { color: #2f4bd1; }
+:root[data-style="glass"] .bill-more, :root[data-style="glass"] .kpi-more,
+:root[data-style="glass"] .history-menu-button, :root[data-style="glass"] .remove-button { border-radius: 999px; }
+
+/* Pop-up menus: solid white stickers */
+:root[data-style="glass"] .bill-menu,
+:root[data-style="glass"] .history-menu {
+  background: #fff; border: 2px solid var(--ink); border-radius: 16px; box-shadow: 0 4px 0 var(--ink); padding: 6px;
+}
+:root[data-style="glass"] .bill-menu button, :root[data-style="glass"] .history-menu button { border-radius: 10px; }
+:root[data-style="glass"] .bill-menu button:hover, :root[data-style="glass"] .history-menu button:hover { background: rgb(255 210 63 / 0.35); }
+
+/* Bars and meters: rounded, flat fruit colors */
+:root[data-style="glass"] .flow-track { height: 44px; border-radius: 999px; background: #fff; border: 2px solid var(--ink); }
+:root[data-style="glass"] .flow-income-line { width: 3px; }
+:root[data-style="glass"] .meter { height: 16px; background: #fff; border: 2px solid var(--ink); }
+:root[data-style="glass"] .meter-fill { background: var(--lime); }
+:root[data-style="glass"] .meter-fill.is-bad { background: var(--grapefruit); }
+:root[data-style="glass"] .hbar-track { height: 12px; background: #fff; border: 1.5px solid rgb(31 42 68 / 0.25); }
+:root[data-style="glass"] .hbar-fill { background: var(--tangerine); }
+:root[data-style="glass"] .swatch { border-radius: 999px; box-shadow: 0 0 0 1.5px var(--ink); }
+
+/* Small surfaces inside cards */
+:root[data-style="glass"] .callout,
+:root[data-style="glass"] .explain > div,
+:root[data-style="glass"] .empty,
+:root[data-style="glass"] .kpi-edit,
+:root[data-style="glass"] .outside-list li { border-radius: 16px; background: rgb(255 255 255 / 0.72); }
+:root[data-style="glass"] .callout.is-good { background: rgb(154 209 59 / 0.3); }
+:root[data-style="glass"] .callout.is-bad { background: rgb(255 107 139 / 0.24); }
+:root[data-style="glass"] .facts { border-radius: 16px; }
+:root[data-style="glass"] .facts > div { background: rgb(255 255 255 / 0.78); }
+:root[data-style="glass"] .history-pill { background: #fff; border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
+:root[data-style="glass"] .history-total { color: var(--accent); }
+
+/* The bar that sticks to the top when you scroll */
+:root[data-style="glass"] .sticky-summary {
+  background: rgb(255 248 236 / 0.82); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border-bottom: 2px solid var(--ink); border-radius: 0 0 20px 20px;
+}
+
+/* Footer */
+:root[data-style="glass"] .footer { border-top: 2px dashed rgb(31 42 68 / 0.2); }

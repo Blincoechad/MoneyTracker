@@ -7,6 +7,13 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <title>Personal Budget Dashboard</title>
+    <script>
+      // Apply the saved look (Classic or Glass) before the page draws, so it never flashes the other one.
+      try {
+        if (localStorage.getItem("personal-budget-dashboard-style") === "glass")
+          document.documentElement.dataset.style = "glass";
+      } catch (error) {}
+    </script>
     <!-- Home Screen icon and name (iPhone uses apple-touch-icon; others use the manifest) -->
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icons/icon-180.png" />
@@ -14,13 +21,21 @@
     <meta name="apple-mobile-web-app-title" content="Budget" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="theme-color" content="#eef2f4" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0d1519" media="(prefers-color-scheme: dark)" />
+    <meta
+      name="theme-color"
+      content="#eef2f4"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0d1519"
+      media="(prefers-color-scheme: dark)"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Nunito:wght@500;600;700;800;900&display=swap"
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -46,14 +61,65 @@
 
     <div class="page">
       <header class="topbar">
-        <div>
+        <div class="title-block">
           <p class="eyebrow" id="monthLabel">This month</p>
-          <h1>Personal Budget</h1>
+          <div class="title-row">
+            <h1>Personal Budget</h1>
+            <!-- Classic ↔ Glass look. Remembered on this device only. -->
+            <button
+              type="button"
+              id="styleSwitch"
+              class="style-switch"
+              role="switch"
+              aria-checked="false"
+              aria-label="Glass style"
+              title="Switch between the Classic and Glass looks"
+            >
+              <span class="style-switch-track" aria-hidden="true">
+                <span class="style-switch-knob">
+                  <svg
+                    class="style-icon style-icon-classic"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                    <path d="M4 10h16M10 10v10" />
+                  </svg>
+                  <svg
+                    class="style-icon style-icon-glass"
+                    viewBox="0 0 24 24"
+                    width="15"
+                    height="15"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M12 2.5l2 6.1 6.1 2-6.1 2-2 6.1-2-6.1-6.1-2 6.1-2z"
+                    />
+                    <circle cx="19" cy="19" r="2.2" />
+                  </svg>
+                </span>
+              </span>
+              <span class="style-switch-label" aria-hidden="true">
+                <span class="label-classic">Classic</span>
+                <span class="label-glass">Glass</span>
+              </span>
+            </button>
+          </div>
         </div>
         <div class="topbar-actions">
           <div id="syncArea" class="sync" hidden>
             <span id="syncStatus" class="sync-status" aria-live="polite"></span>
-            <button type="button" id="syncButton" class="button button-outline button-small">
+            <button
+              type="button"
+              id="syncButton"
+              class="button button-outline button-small"
+            >
               Sign in to sync
             </button>
           </div>
@@ -123,7 +189,10 @@
             <p class="kpi-sub" id="kpiIncomeSub"></p>
           </div>
           <div class="kpi">
-            <dt><span class="kpi-op" aria-hidden="true">−</span> Bills &amp; expenses</dt>
+            <dt>
+              <span class="kpi-op" aria-hidden="true">−</span>
+              Bills &amp; expenses
+            </dt>
             <dd id="kpiExpenses">$0.00</dd>
             <p class="kpi-sub" id="kpiExpensesSub"></p>
           </div>
@@ -133,49 +202,159 @@
               <div class="kpi-part" data-savings-part="month">
                 <div class="kpi-part-head">
                   <span class="kpi-part-label">Added this month</span>
-                  <button type="button" class="kpi-more" data-savings-menu="month" aria-label="Change added this month" aria-expanded="false" aria-controls="savingsEditMonth">⋯</button>
+                  <button
+                    type="button"
+                    class="kpi-more"
+                    data-savings-menu="month"
+                    aria-label="Change added this month"
+                    aria-expanded="false"
+                    aria-controls="savingsEditMonth"
+                  >
+                    ⋯
+                  </button>
                 </div>
                 <span class="kpi-value" id="kpiSavings">$0.00</span>
                 <span class="kpi-sub" id="kpiSavingsSub"></span>
-                <form class="kpi-edit" id="savingsEditMonth" data-savings-form="month" hidden>
-                  <div class="kpi-edit-modes" role="group" aria-label="What to do">
-                    <button type="button" data-savings-mode="add" aria-pressed="true">Add</button>
-                    <button type="button" data-savings-mode="remove" aria-pressed="false">Take out</button>
-                    <button type="button" data-savings-mode="set" aria-pressed="false">Set</button>
+                <form
+                  class="kpi-edit"
+                  id="savingsEditMonth"
+                  data-savings-form="month"
+                  hidden
+                >
+                  <div
+                    class="kpi-edit-modes"
+                    role="group"
+                    aria-label="What to do"
+                  >
+                    <button
+                      type="button"
+                      data-savings-mode="add"
+                      aria-pressed="true"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      data-savings-mode="remove"
+                      aria-pressed="false"
+                    >
+                      Take out
+                    </button>
+                    <button
+                      type="button"
+                      data-savings-mode="set"
+                      aria-pressed="false"
+                    >
+                      Set
+                    </button>
                   </div>
                   <div class="kpi-edit-row">
                     <div class="money-input">
                       <span aria-hidden="true">$</span>
-                      <input type="text" inputmode="decimal" autocomplete="off" id="savingsEditMonthAmount" aria-label="Amount" placeholder="0.00" />
+                      <input
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        id="savingsEditMonthAmount"
+                        aria-label="Amount"
+                        placeholder="0.00"
+                      />
                     </div>
-                    <button type="submit" class="button button-small">Save</button>
-                    <button type="button" class="button button-small button-quiet" data-savings-cancel>Cancel</button>
+                    <button type="submit" class="button button-small">
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      class="button button-small button-quiet"
+                      data-savings-cancel
+                    >
+                      Cancel
+                    </button>
                   </div>
-                  <p class="field-error" id="savingsEditMonthAmountError" role="alert"></p>
+                  <p
+                    class="field-error"
+                    id="savingsEditMonthAmountError"
+                    role="alert"
+                  ></p>
                 </form>
               </div>
               <div class="kpi-part" data-savings-part="total">
                 <div class="kpi-part-head">
                   <span class="kpi-part-label">Total saved</span>
-                  <button type="button" class="kpi-more" data-savings-menu="total" aria-label="Change total saved" aria-expanded="false" aria-controls="savingsEditTotal">⋯</button>
+                  <button
+                    type="button"
+                    class="kpi-more"
+                    data-savings-menu="total"
+                    aria-label="Change total saved"
+                    aria-expanded="false"
+                    aria-controls="savingsEditTotal"
+                  >
+                    ⋯
+                  </button>
                 </div>
                 <span class="kpi-value" id="kpiSavedTotal">$0.00</span>
                 <span class="kpi-sub">All months added up</span>
-                <form class="kpi-edit" id="savingsEditTotal" data-savings-form="total" hidden>
-                  <div class="kpi-edit-modes" role="group" aria-label="What to do">
-                    <button type="button" data-savings-mode="add" aria-pressed="true">Add</button>
-                    <button type="button" data-savings-mode="remove" aria-pressed="false">Take out</button>
-                    <button type="button" data-savings-mode="set" aria-pressed="false">Set</button>
+                <form
+                  class="kpi-edit"
+                  id="savingsEditTotal"
+                  data-savings-form="total"
+                  hidden
+                >
+                  <div
+                    class="kpi-edit-modes"
+                    role="group"
+                    aria-label="What to do"
+                  >
+                    <button
+                      type="button"
+                      data-savings-mode="add"
+                      aria-pressed="true"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      data-savings-mode="remove"
+                      aria-pressed="false"
+                    >
+                      Take out
+                    </button>
+                    <button
+                      type="button"
+                      data-savings-mode="set"
+                      aria-pressed="false"
+                    >
+                      Set
+                    </button>
                   </div>
                   <div class="kpi-edit-row">
                     <div class="money-input">
                       <span aria-hidden="true">$</span>
-                      <input type="text" inputmode="decimal" autocomplete="off" id="savingsEditTotalAmount" aria-label="Amount" placeholder="0.00" />
+                      <input
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        id="savingsEditTotalAmount"
+                        aria-label="Amount"
+                        placeholder="0.00"
+                      />
                     </div>
-                    <button type="submit" class="button button-small">Save</button>
-                    <button type="button" class="button button-small button-quiet" data-savings-cancel>Cancel</button>
+                    <button type="submit" class="button button-small">
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      class="button button-small button-quiet"
+                      data-savings-cancel
+                    >
+                      Cancel
+                    </button>
                   </div>
-                  <p class="field-error" id="savingsEditTotalAmountError" role="alert"></p>
+                  <p
+                    class="field-error"
+                    id="savingsEditTotalAmountError"
+                    role="alert"
+                  ></p>
                 </form>
               </div>
             </dd>
@@ -184,7 +363,11 @@
       </section>
 
       <!-- ===================== THIS WEEK: the one thing to do each Friday ===================== -->
-      <section class="panel this-week" id="thisWeek" aria-labelledby="thisWeekHeading">
+      <section
+        class="panel this-week"
+        id="thisWeek"
+        aria-labelledby="thisWeekHeading"
+      >
         <div class="this-week-main">
           <div>
             <p class="eyebrow" id="thisWeekWhen"></p>
@@ -192,7 +375,13 @@
           </div>
           <div class="money-input this-week-input">
             <span aria-hidden="true">$</span>
-            <input type="text" inputmode="decimal" autocomplete="off" id="thisWeekPay" aria-labelledby="thisWeekHeading" />
+            <input
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              id="thisWeekPay"
+              aria-labelledby="thisWeekHeading"
+            />
           </div>
           <p class="field-error" id="thisWeekPay-error" role="alert"></p>
           <p class="this-week-result" id="thisWeekResult"></p>
@@ -211,11 +400,20 @@
       <section class="panel paychecks" aria-labelledby="weeksHeading">
         <div class="panel-head">
           <h2 id="weeksHeading">Paychecks this month</h2>
-          <p class="hint">Each paycheck pays the bills due before the next one. Tap a bill to mark it paid.</p>
+          <p class="hint">
+            Each paycheck pays the bills due before the next one. Tap a bill to
+            mark it paid.
+          </p>
         </div>
         <div id="weekList" class="paycheck-list"></div>
         <!-- Phones only: the list starts folded to this week's paycheck -->
-        <button type="button" id="paychecksToggle" class="button button-outline button-small paychecks-toggle" aria-controls="weekList" aria-expanded="false"></button>
+        <button
+          type="button"
+          id="paychecksToggle"
+          class="button button-outline button-small paychecks-toggle"
+          aria-controls="weekList"
+          aria-expanded="false"
+        ></button>
       </section>
 
       <div class="layout">
@@ -255,7 +453,6 @@
             </details>
           </section>
 
-
           <section class="panel settings" aria-labelledby="settingsHeading">
             <details id="settingsDetails">
               <summary class="settings-summary">
@@ -266,11 +463,16 @@
                 <span class="settings-toggle" aria-hidden="true"></span>
               </summary>
               <div class="settings-body">
-                <section class="settings-section" aria-labelledby="incomeHeading">
+                <section
+                  class="settings-section"
+                  aria-labelledby="incomeHeading"
+                >
                   <h3 id="incomeHeading">Income</h3>
 
                   <div class="field">
-                    <label for="expectedWeekly">Expected weekly take-home</label>
+                    <label for="expectedWeekly">
+                      Expected weekly take-home
+                    </label>
                     <div class="money-input">
                       <span aria-hidden="true">$</span>
                       <input
@@ -282,10 +484,14 @@
                         placeholder="0.00"
                       />
                     </div>
-                    <p class="field-error" id="expectedWeeklyError" role="alert"></p>
+                    <p
+                      class="field-error"
+                      id="expectedWeeklyError"
+                      role="alert"
+                    ></p>
                     <p class="hint">
-                      Your normal week. Every week you haven't filled in below uses
-                      this amount.
+                      Your normal week. Every week you haven't filled in below
+                      uses this amount.
                     </p>
                   </div>
 
@@ -315,7 +521,10 @@
                   </details>
                 </section>
 
-                <section class="settings-section" aria-labelledby="expensesHeading">
+                <section
+                  class="settings-section"
+                  aria-labelledby="expensesHeading"
+                >
                   <div class="panel-head">
                     <h3 id="expensesHeading">Bills &amp; expenses</h3>
                     <p class="panel-total">
@@ -324,17 +533,17 @@
                     </p>
                   </div>
                   <div class="expense-header" aria-hidden="true">
-                  <span>Name</span>
-                  <span>Amount</span>
-                  <span>How often</span>
-                  <span>Due</span>
-                  <span>Per month</span>
-                  <span></span>
-                </div>
+                    <span>Name</span>
+                    <span>Amount</span>
+                    <span>How often</span>
+                    <span>Due</span>
+                    <span>Per month</span>
+                    <span></span>
+                  </div>
                   <div id="expenseList" class="expense-list"></div>
                   <p id="expenseEmpty" class="empty" hidden>
-                    No expenses yet. Add your rent, phone, gas, food, and anything
-                    else you pay.
+                    No expenses yet. Add your rent, phone, gas, food, and
+                    anything else you pay.
                   </p>
                   <button
                     type="button"
@@ -345,7 +554,10 @@
                   </button>
                 </section>
 
-                <section class="settings-section" aria-labelledby="savingsHeading">
+                <section
+                  class="settings-section"
+                  aria-labelledby="savingsHeading"
+                >
                   <h3 id="savingsHeading">Savings goal</h3>
                   <div class="field-row">
                     <div class="field">
@@ -361,7 +573,11 @@
                           placeholder="0.00"
                         />
                       </div>
-                      <p class="field-error" id="savingsAmountError" role="alert"></p>
+                      <p
+                        class="field-error"
+                        id="savingsAmountError"
+                        role="alert"
+                      ></p>
                     </div>
                     <fieldset class="field">
                       <legend>Every</legend>
@@ -398,10 +614,20 @@
               <label for="outsideBalance">Balance</label>
               <div class="money-input">
                 <span aria-hidden="true">$</span>
-                <input id="outsideBalance" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" />
+                <input
+                  id="outsideBalance"
+                  type="text"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  placeholder="0.00"
+                />
               </div>
               <p class="field-error" id="outsideBalanceError" role="alert"></p>
-              <p class="hint">What's in your side savings now. Bills you pay from it this month come off below, and the balance updates when the month ends.</p>
+              <p class="hint">
+                What's in your side savings now. Bills you pay from it this
+                month come off below, and the balance updates when the month
+                ends.
+              </p>
             </div>
             <div id="outsideUses"></div>
           </section>
@@ -409,8 +635,6 @@
 
         <!-- ===================== RIGHT: what it means ===================== -->
         <div class="column">
-
-
           <section class="panel" aria-labelledby="flowHeading">
             <h2 id="flowHeading">Where this month's income goes</h2>
             <div class="flow" id="flowChart">
@@ -499,10 +723,18 @@
         </div>
         <div class="footer-actions">
           <div class="footer-buttons">
-            <button type="button" id="backupButton" class="button button-outline button-small">
+            <button
+              type="button"
+              id="backupButton"
+              class="button button-outline button-small"
+            >
               Back up
             </button>
-            <button type="button" id="restoreButton" class="button button-outline button-small">
+            <button
+              type="button"
+              id="restoreButton"
+              class="button button-outline button-small"
+            >
               Restore backup
             </button>
             <button
@@ -514,7 +746,12 @@
             </button>
           </div>
           <p class="hint" id="backupStatus"></p>
-          <input type="file" id="restoreFile" accept=".json,application/json" hidden />
+          <input
+            type="file"
+            id="restoreFile"
+            accept=".json,application/json"
+            hidden
+          />
         </div>
       </footer>
     </div>
