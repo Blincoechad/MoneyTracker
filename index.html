@@ -340,6 +340,23 @@
               </div>
             </details>
           </section>
+
+          <section class="panel outside" aria-labelledby="outsideHeading">
+            <div class="panel-head">
+              <h2 id="outsideHeading">Outside savings</h2>
+              <p class="panel-total" id="outsideLeft"></p>
+            </div>
+            <div class="field">
+              <label for="outsideBalance">Balance</label>
+              <div class="money-input">
+                <span aria-hidden="true">$</span>
+                <input id="outsideBalance" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" />
+              </div>
+              <p class="field-error" id="outsideBalanceError" role="alert"></p>
+              <p class="hint">What's in your side savings now. Bills you pay from it this month come off below, and the balance updates when the month ends.</p>
+            </div>
+            <div id="outsideUses"></div>
+          </section>
         </div>
 
         <!-- ===================== RIGHT: what it means ===================== -->

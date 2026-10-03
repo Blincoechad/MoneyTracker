@@ -178,10 +178,14 @@ function calculateBudget(state, today) {
   const monthIndex = today.getMonth();
   const monthlyExpenses = monthlyExpenseTotal(state.expenses, year, monthIndex, weeksInMonth);
   const monthlySavings = monthlySavingsTotal(state.savings, weeksInMonth);
-  const projectedRemaining = projectedIncome - monthlyExpenses - monthlySavings;
+
+  // Bills you chose to pay from another source (like side savings) don't come out of your pay.
+  const paychecks = planPaychecks(state, resolvedWeeks, year, monthIndex);
+  const paidFromOther = paychecks.reduce((sum, plan) => sum + plan.fromOther, 0);
+  const projectedRemaining = projectedIncome - monthlyExpenses - monthlySavings + paidFromOther;
 
   // --- Minimum weekly income (break-even if every week paid the same) ---
-  const requiredMonthlyIncome = monthlyExpenses + monthlySavings;
+  const requiredMonthlyIncome = monthlyExpenses + monthlySavings - paidFromOther;
   const minimumWeeklyIncome = weeksInMonth > 0 ? requiredMonthlyIncome / weeksInMonth : 0;
   const weeklyBuffer = expectedWeekly - minimumWeeklyIncome;
 
@@ -242,7 +246,8 @@ function calculateBudget(state, today) {
       monthly: monthlyAmount(expense, year, monthIndex, weeksInMonth),
     })),
 
-    paychecks: planPaychecks(state, resolvedWeeks, year, monthIndex),
+    paychecks,
+    paidFromOther,
   };
 }
 
@@ -257,6 +262,8 @@ function calculateBudget(state, today) {
      savings               → every paycheck (weekly) or the first (monthly)
    A bill due before this month's first payday is still listed on the
    first paycheck, flagged so you know it's already due.
+   A bill you mark "pay from other source" for a paycheck stays listed
+   but doesn't come out of that paycheck (it's counted in fromOther).
    Everything adds up to the same totals as the summary, so the last
    paycheck's running total equals "projected remaining".
    --------------------------------------------------------------------- */
@@ -317,13 +324,19 @@ function planPaychecks(state, weeks, year, monthIndex) {
 
   // Dated bills first (by due day), then every-paycheck ones, savings last.
   const order = (item) => (item.isSavings ? 100 : item.when === "due" ? item.dueDay : item.when === "unset" ? 0 : 50);
+  const otherSource = state.otherSource ?? {};
   let running = 0;
   return plans.map((items, i) => {
     items.sort((a, b) => order(a) - order(b));
-    const out = items.reduce((sum, item) => sum + item.amount, 0);
+    const key = weeks[i].key;
+    items.forEach((item) => {
+      item.fromOther = !item.isSavings && Boolean(otherSource[`${key}|${item.id}`]);
+    });
+    const out = items.reduce((sum, item) => sum + (item.fromOther ? 0 : item.amount), 0);
+    const fromOther = items.reduce((sum, item) => sum + (item.fromOther ? item.amount : 0), 0);
     const left = weeks[i].amountUsed - out;
     running += left;
-    return { key: weeks[i].key, items, out, left, running };
+    return { key, items, out, fromOther, left, running };
   });
 }
 

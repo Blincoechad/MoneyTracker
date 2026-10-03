@@ -46,6 +46,8 @@ function createExampleState() {
     actualsMonth: currentMonthKey(),
     actuals: { [firstPayday.key]: "425" },
     paid: {},
+    otherSource: {},
+    outsideBalance: "",
     expenses: [
       { id: newId(), name: "Rent", amount: "700", frequency: "monthly", due: "1" },
       { id: newId(), name: "Internet", amount: "20", frequency: "monthly", due: "20" },
@@ -66,6 +68,8 @@ function createBlankState() {
     actualsMonth: currentMonthKey(),
     actuals: {},
     paid: {}, // "<payday>|<bill id>": true once you've marked it paid
+    otherSource: {}, // "<payday>|<bill id>": true when that paycheck isn't paying it (side savings etc.)
+    outsideBalance: "", // side savings balance; this month's "other source" bills come off it
     expenses: [],
     savings: { amount: "", frequency: "monthly" },
   };
@@ -187,6 +191,7 @@ function loadState() {
   state.expenses = Array.isArray(saved.expenses) ? saved.expenses : [];
   state.actuals = saved.actuals && typeof saved.actuals === "object" ? saved.actuals : {};
   state.paid = saved.paid && typeof saved.paid === "object" ? saved.paid : {};
+  state.otherSource = saved.otherSource && typeof saved.otherSource === "object" ? saved.otherSource : {};
   migrateAverageWeeks(state);
   closeMonthIfNeeded(state);
   return state;
@@ -197,15 +202,27 @@ function loadState() {
 // Returns true when a month was closed.
 function closeMonthIfNeeded(state) {
   if (state.actualsMonth === currentMonthKey()) return false;
+  spendOutsideSavings(state);
   if (!state.isExample) {
     closedMonth = { key: state.actualsMonth, state: structuredClone(state) };
     monthNoticeText = "A new month started. Last month's weekly pay was saved to Monthly history and cleared. Your income, bills, and savings are unchanged.";
   }
   state.actuals = {};
   state.paid = {};
+  state.otherSource = {};
   state.actualsMonth = currentMonthKey();
   state.currentWeek = "auto";
   return true;
+}
+
+// When a month closes, the bills it paid from outside savings come off that balance for good,
+// since next month starts with none marked.
+function spendOutsideSavings(state) {
+  const balance = parseMoney(state.outsideBalance).value;
+  if (balance === null || !state.otherSource || Object.keys(state.otherSource).length === 0) return;
+  const [year, month] = state.actualsMonth.split("-").map(Number);
+  const { paidFromOther } = calculateBudget({ ...state, currentWeek: 99 }, new Date(year, month, 0));
+  state.outsideBalance = String(Math.round((balance - paidFromOther) * 100) / 100);
 }
 
 // Older saves had an "Average month" mode with weeks keyed avg-1 … avg-4.
@@ -389,6 +406,8 @@ function renderInputs() {
   const state = activeState();
   $("expectedWeekly").value = state.expectedWeekly;
   $("savingsAmount").value = state.savings.amount;
+  $("outsideBalance").value = state.outsideBalance;
+  validateAmount($("outsideBalance"));
   $(state.savings.frequency === "weekly" ? "savingsWeekly" : "savingsMonthly").checked = true;
   $("paydayWeekday").value = String(state.paydayWeekday);
   validateAmount($("expectedWeekly"));
@@ -424,6 +443,7 @@ function renderResults(r, base) {
   renderExpenseMonthly(r);
   renderNeeds(r);
   renderSettingsSummary(r, state);
+  renderOutsideSavings(r, state);
   renderFlow(r);
   renderBreakdown(r);
   renderExpenseBars(r);
@@ -491,7 +511,8 @@ function renderKpis(r, base) {
     b.projectedIncome,
     r.projectedIncome
   );
-  setKpi("kpiExpenses", money(r.monthlyExpenses), `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} this month`, b.monthlyExpenses, r.monthlyExpenses);
+  const billCount = `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} this month`;
+  setKpi("kpiExpenses", money(r.monthlyExpenses), r.paidFromOther > 0 ? `${billCount} · ${money(r.paidFromOther)} from other source` : billCount, b.monthlyExpenses, r.monthlyExpenses);
   setKpi("kpiSavings", money(r.monthlySavings), "Set aside, not spent", b.monthlySavings, r.monthlySavings);
 }
 
@@ -516,22 +537,36 @@ function dueText(item) {
   }
 }
 
-// The checklist of bills one paycheck covers. Tapping one marks it paid.
-function billListHtml(plan, state) {
+// Which bill's ⋯ menu is open: the same bill shows in the This week card and on its paycheck card.
+let openBillMenu = null; // { area: "thisWeek" | "weekList", key }
+
+// The checklist of bills one paycheck covers. Tapping one marks it paid;
+// its ⋯ menu moves it off this paycheck ("pay from other source") or back.
+function billListHtml(plan, state, area) {
   if (plan.items.length === 0) return `<p class="bill-empty">Nothing due from this paycheck.</p>`;
   return plan.items
     .map((item) => {
       const key = `${plan.key}|${item.id}`;
+      const safeKey = escapeHtml(key);
       const paid = Boolean(state.paid[key]);
+      const menuOpen = openBillMenu?.area === area && openBillMenu.key === key;
+      const classes = ["bill-check", paid && "is-paid", item.isSavings && "is-savings", item.fromOther && "is-other"].filter(Boolean).join(" ");
+      const menu = item.isSavings ? "" : `
+          <button type="button" class="bill-more" data-bill-menu="${safeKey}" aria-label="More options for ${escapeHtml(item.name)}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋯</button>
+          <div class="bill-menu" role="menu"${menuOpen ? "" : " hidden"}>
+            <button type="button" role="menuitem" data-other-source="${safeKey}">${item.fromOther ? "Pay from this paycheck" : "Pay from other source"}</button>
+          </div>`;
       return `
-        <button type="button" class="bill-check${paid ? " is-paid" : ""}${item.isSavings ? " is-savings" : ""}" data-paid-key="${escapeHtml(key)}" aria-pressed="${paid}">
-          <span class="bill-box" aria-hidden="true">${paid ? CHECK_ICON : ""}</span>
-          <span class="bill-text">
-            <span class="bill-name">${escapeHtml(item.name)}</span>
-            <span class="bill-due${item.beforePayday ? " is-late" : ""}">${dueText(item)}</span>
-          </span>
-          <span class="bill-amount">${money(item.amount)}</span>
-        </button>`;
+        <div class="bill-row${menuOpen ? " is-open" : ""}">
+          <button type="button" class="${classes}" data-paid-key="${safeKey}" aria-pressed="${paid}">
+            <span class="bill-box" aria-hidden="true">${paid ? CHECK_ICON : ""}</span>
+            <span class="bill-text">
+              <span class="bill-name">${escapeHtml(item.name)}</span>
+              <span class="bill-due${item.beforePayday && !item.fromOther ? " is-late" : ""}">${item.fromOther ? "Paid from other source" : dueText(item)}</span>
+            </span>
+            <span class="bill-amount">${money(item.amount)}</span>
+          </button>${menu}
+        </div>`;
     })
     .join("");
 }
@@ -563,8 +598,9 @@ function renderWeeks(r, state) {
       : `Counts as ${money(week.amountUsed)} (${week.status === "assumed" ? "assumed" : "expected"})`;
     diffCell.className = `paycheck-diff ${week.status === "actual" && diff > 0 ? "text-good" : week.status === "actual" && diff < 0 ? "text-bad" : ""}`;
 
-    card.querySelector('[data-role="bills"]').innerHTML = billListHtml(plan, state);
+    card.querySelector('[data-role="bills"]').innerHTML = billListHtml(plan, state, "weekList");
     card.querySelector('[data-role="totals"]').innerHTML = `
+      ${plan.fromOther > 0 ? `<div class="is-other"><dt>From other source</dt><dd>${money(plan.fromOther)}</dd></div>` : ""}
       <div><dt>Left from this check</dt><dd class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</dd></div>
       <div><dt>Running total</dt><dd>${signedMoney(plan.running)}</dd></div>`;
 
@@ -636,7 +672,7 @@ function renderThisWeek(r, state) {
 
   const plan = r.paychecks[week.index];
   const paidCount = plan.items.filter((item) => state.paid[`${plan.key}|${item.id}`]).length;
-  $("thisWeekBills").innerHTML = billListHtml(plan, state);
+  $("thisWeekBills").innerHTML = billListHtml(plan, state, "thisWeek");
   $("thisWeekProgress").textContent = plan.items.length ? `${paidCount} of ${plan.items.length} done` : "";
 
   // Until the next payday: the next card, or a week after the last one (next month's first).
@@ -644,7 +680,7 @@ function renderThisWeek(r, state) {
   const nextDate = next ? new Date(`${next.key}T12:00:00`) : new Date(new Date(`${week.key}T12:00:00`).getTime() + 7 * 86_400_000);
   $("thisWeekSpend").innerHTML = plan.items.length === 0
     ? `Nothing due from this paycheck. All ${money(week.amountUsed)} is yours until ${shortDate(nextDate)}.`
-    : `${money(week.amountUsed)} − ${money(plan.out)} = <strong class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</strong> ${plan.left < -0.005 ? "short" : "to spend"} until ${shortDate(nextDate)}`;
+    : `${money(week.amountUsed)} − ${money(plan.out)} = <strong class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</strong> ${plan.left < -0.005 ? "short" : "to spend"} until ${shortDate(nextDate)}${plan.fromOther > 0 ? ` <span class="hint">(${money(plan.fromOther)} paid from other source)</span>` : ""}`;
 }
 
 function renderNeeds(r) {
@@ -708,6 +744,27 @@ function renderNeeds(r) {
     <p><strong>Stay on plan:</strong> <span class="formula">${money(r.expectedWeekly)} usual ${r.shortfallVsPlan >= 0 ? "+" : "−"} ${money(Math.abs(r.shortfallVsPlan))} ${r.shortfallVsPlan >= 0 ? "behind" : "ahead"} ÷ ${r.openWeekCount} = ${money(r.onPlanPerOpenWeek)}/wk</span></p>`;
 }
 
+// Side savings: the balance, minus every bill this month marked "pay from other source".
+function renderOutsideSavings(r, state) {
+  const balance = parseMoney(state.outsideBalance).value ?? 0;
+  const left = balance - r.paidFromOther;
+  const uses = r.paychecks.flatMap((plan, i) =>
+    plan.items.filter((item) => item.fromOther).map((item) => ({ item, label: weekLabel(r.weeks[i]) })));
+
+  $("outsideLeft").innerHTML = `<span class="${left < -0.005 ? "text-bad" : ""}">${money(left)}</span> left`;
+  $("outsideUses").innerHTML = uses.length === 0
+    ? `<p class="hint">Nothing paid from here this month. On any bill, tap ⋯ → "Pay from other source" to take it from here instead of your paycheck.</p>`
+    : `<ul class="outside-list">
+        ${uses.map(({ item, label }) => `<li><span>${escapeHtml(item.name)} <small>${label.name} · ${label.dates}</small></span><span>−${money(item.amount)}</span></li>`).join("")}
+      </ul>
+      <dl class="outside-totals">
+        <div><dt>Balance</dt><dd>${money(balance)}</dd></div>
+        <div><dt>Used this month</dt><dd>−${money(r.paidFromOther)}</dd></div>
+        <div><dt>Left</dt><dd class="${left < -0.005 ? "text-bad" : "text-good"}">${money(left)}</dd></div>
+      </dl>
+      ${left < -0.005 ? `<p class="callout is-bad">That's ${money(-left)} more than you have in outside savings.</p>` : ""}`;
+}
+
 // One line under "Budget settings" so you can see your setup without opening it.
 function renderSettingsSummary(r, state) {
   const savings = parseMoney(state.savings.amount).value ?? 0;
@@ -721,7 +778,8 @@ function renderSettingsSummary(r, state) {
 }
 
 function renderFlow(r) {
-  const outflow = r.monthlyExpenses + r.monthlySavings;
+  const fromPay = r.monthlyExpenses - r.paidFromOther; // bills paid from other sources don't use this month's income
+  const outflow = fromPay + r.monthlySavings;
   const scale = Math.max(r.projectedIncome, outflow);
   const track = $("flowTrack");
 
@@ -733,7 +791,7 @@ function renderFlow(r) {
 
   const pct = (amount) => (Math.max(0, amount) / scale) * 100;
   const segments = [
-    ["expenses", r.monthlyExpenses, "Expenses"],
+    ["expenses", fromPay, "Expenses"],
     ["savings", r.monthlySavings, "Savings"],
   ];
   if (r.projectedRemaining > 0) segments.push(["remaining", r.projectedRemaining, "Remaining"]);
@@ -761,7 +819,7 @@ function renderBreakdown(r) {
   const perWeek = (amount) => (r.weeksInMonth > 0 ? amount / r.weeksInMonth : 0);
   const rows = [
     ["remaining", "Income", money(r.projectedIncome), money(perWeek(r.projectedIncome)), null],
-    ["expenses", "Expenses", `−${money(r.monthlyExpenses)}`, `−${money(perWeek(r.monthlyExpenses))}`, null],
+    ["expenses", r.paidFromOther > 0 ? "Expenses from pay" : "Expenses", `−${money(r.monthlyExpenses - r.paidFromOther)}`, `−${money(perWeek(r.monthlyExpenses - r.paidFromOther))}`, null],
     ["savings", "Savings", `−${money(r.monthlySavings)}`, `−${money(perWeek(r.monthlySavings))}`, null],
     [null, "Remaining", signedMoney(r.projectedRemaining), signedMoney(perWeek(r.projectedRemaining)), r.isPositive ? "text-good" : "text-bad"],
   ];
@@ -810,7 +868,7 @@ function renderExplanations(r, state) {
   const divisor = `÷ ${r.weeks.length} weeks`;
   $("minimumExplain").innerHTML = `
     <p><strong>If every week paid the same</strong> (the whole month, not just what's left):</p>
-    <p class="formula">${money(r.monthlyExpenses)} expenses + ${money(r.monthlySavings)} savings = ${money(r.requiredMonthlyIncome)} needed per month</p>
+    <p class="formula">${money(r.monthlyExpenses)} expenses + ${money(r.monthlySavings)} savings${r.paidFromOther > 0 ? ` − ${money(r.paidFromOther)} from other source` : ""} = ${money(r.requiredMonthlyIncome)} needed per month</p>
     <p class="formula">${money(r.requiredMonthlyIncome)} ${divisor} = ${money(r.minimumWeeklyIncome)} per week</p>
     <p>Buffer = what you expect − what you need: <span class="formula">${weekly} − ${money(r.minimumWeeklyIncome)} = ${signedMoney(r.weeklyBuffer)}</span></p>`;
 
@@ -894,6 +952,7 @@ function buildMonthReport(monthKey, state) {
     `Month total:         ${money(r.projectedIncome)}  (entered pay + expected for blank weeks)`,
     "",
     `Bills & expenses:    ${money(r.monthlyExpenses)}`,
+    ...(r.paidFromOther > 0 ? [`  from other source: ${money(r.paidFromOther)}  (not from pay)`] : []),
     `Savings:             ${money(r.monthlySavings)}`,
     `Remaining:           ${signedMoney(r.projectedRemaining)}`,
     ""
@@ -1037,6 +1096,9 @@ function handleChange(event) {
   if (el.id === "expectedWeekly") {
     state.expectedWeekly = el.value;
     validateAmount(el);
+  } else if (el.id === "outsideBalance") {
+    state.outsideBalance = el.value;
+    validateAmount(el);
   } else if (el.id === "savingsAmount") {
     state.savings.amount = el.value;
     validateAmount(el);
@@ -1084,6 +1146,46 @@ document.addEventListener("change", (event) => {
 });
 
 /* ---------- Buttons ---------- */
+
+// A bill's ⋯ menu: open/close it, or move the bill off (or back onto) this paycheck.
+// The lists redraw on every change, so focus is put back on the matching button.
+document.addEventListener("click", (event) => {
+  const menuButton = event.target.closest("[data-bill-menu]");
+  const otherButton = event.target.closest("[data-other-source]");
+  if (!menuButton && !otherButton && openBillMenu && !event.target.closest(".bill-row.is-open")) {
+    openBillMenu = null;
+    refresh();
+    return;
+  }
+  if (!menuButton && !otherButton) return;
+  const area = event.target.closest("#thisWeek") ? "thisWeek" : "weekList";
+  const scope = `#${area}`;
+
+  if (menuButton) {
+    const key = menuButton.dataset.billMenu;
+    const isOpen = openBillMenu?.area === area && openBillMenu.key === key;
+    openBillMenu = isOpen ? null : { area, key };
+    refresh();
+    document.querySelector(`${scope} [${isOpen ? "data-bill-menu" : "data-other-source"}="${CSS.escape(key)}"]`)?.focus();
+    return;
+  }
+  const state = activeState();
+  const key = otherButton.dataset.otherSource;
+  if (state.otherSource[key]) delete state.otherSource[key];
+  else state.otherSource[key] = true;
+  if (!scenario) baseline.isExample = false;
+  openBillMenu = null;
+  refresh();
+  document.querySelector(`${scope} [data-bill-menu="${CSS.escape(key)}"]`)?.focus();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !openBillMenu) return;
+  const { area, key } = openBillMenu;
+  openBillMenu = null;
+  refresh();
+  document.querySelector(`#${area} [data-bill-menu="${CSS.escape(key)}"]`)?.focus();
+});
 
 // Tapping a bill on a paycheck marks it paid (or unpaid). The list redraws, so focus goes back to it.
 document.addEventListener("click", (event) => {

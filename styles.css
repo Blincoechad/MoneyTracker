@@ -466,7 +466,8 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
   .hero, .layout { grid-template-columns: minmax(0, 1fr); }
   /* One column: let the panels from both columns share one list, with settings last. */
   .column { display: contents; }
-  .settings { order: 1; }
+  .outside { order: 1; }
+  .settings { order: 2; }
 }
 
 @media (max-width: 640px) {
@@ -576,7 +577,7 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 }
 .bill-check.is-paid .bill-box { background: var(--good); border-color: var(--good); }
 .bill-text { display: grid; flex: 1; min-width: 0; }
-.bill-name { font-size: 0.88rem; font-weight: 600; overflow-wrap: break-word; hyphens: auto; }
+.bill-name { font-size: 0.88rem; font-weight: 600; overflow-wrap: break-word; }
 .bill-check.is-paid .bill-name { text-decoration: line-through; color: var(--muted); }
 .bill-check.is-savings .bill-name::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--savings); margin-right: 6px; vertical-align: 1px; }
 .bill-due { font-size: 0.74rem; color: var(--muted); }
@@ -599,4 +600,59 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 @media (max-width: 640px) {
   .paychecks-toggle { display: inline-block; }
   .paycheck-list:not(.is-expanded) .paycheck:not(.is-focus) { display: none; }
+}
+
+/* ---------- Bill ⋯ menu: pay from other source ---------- */
+.bill-row { position: relative; display: flex; align-items: stretch; gap: 4px; }
+.bill-row .bill-check { flex: 1; min-width: 0; }
+.bill-more {
+  flex: none; width: 36px; min-height: 44px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer;
+}
+.bill-more:hover, .bill-row.is-open .bill-more { background: var(--surface-2); color: var(--ink); }
+.bill-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 10; min-width: 200px; padding: 4px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); display: grid;
+}
+.bill-menu[hidden] { display: none; }
+.bill-menu button {
+  text-align: left; min-height: 40px; padding: 8px 12px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--ink); font: inherit; font-size: 0.9rem; cursor: pointer;
+}
+.bill-menu button:hover { background: var(--surface-2); }
+
+/* Paid from another source: still listed, but not taken out of this paycheck */
+.bill-check.is-other { background: transparent; border: 1px dashed var(--line); }
+.bill-check.is-other .bill-due { color: var(--savings); font-weight: 600; }
+.bill-check.is-other .bill-amount { color: var(--muted); text-decoration: line-through; }
+.paycheck-totals .is-other dt, .paycheck-totals .is-other dd { color: var(--savings); }
+
+/* ---------- Outside savings ---------- */
+.outside-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.outside-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 0.88rem; }
+.outside-list li small { display: block; color: var(--muted); font-size: 0.74rem; }
+.outside-list li > span:last-child { font-family: var(--font-num); font-weight: 600; color: var(--savings); white-space: nowrap; }
+.outside-totals { margin: 10px 0 0; display: grid; gap: 2px; }
+.outside-totals > div { display: flex; justify-content: space-between; font-size: 0.86rem; }
+.outside-totals dt { color: var(--muted); }
+.outside-totals dd { margin: 0; font-family: var(--font-num); font-weight: 600; }
+.outside-totals > div:last-child { padding-top: 6px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 0.95rem; }
+
+/* Bill rows: name and amount on the first line, due date underneath at full width,
+   so narrow paycheck columns don't squeeze the text. */
+.bill-check {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "box name amount" "box due due"; column-gap: 8px; row-gap: 1px;
+}
+.bill-text { display: contents; }
+.bill-box { grid-area: box; }
+.bill-name { grid-area: name; }
+.bill-due { grid-area: due; }
+.bill-amount { grid-area: amount; align-self: center; }
+.bill-list > *, .paycheck > * { min-width: 0; }
+.paycheck .bill-more { width: 28px; }
+/* In a narrow paycheck column the name gets the whole first line; amount moves beside the due date. */
+.bill-list { container-type: inline-size; }
+@container (max-width: 220px) {
+  .bill-check { grid-template-areas: "box name name" "box due amount"; }
 }
