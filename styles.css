@@ -656,3 +656,42 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 @container (max-width: 220px) {
   .bill-check { grid-template-areas: "box name name" "box due amount"; }
 }
+
+/* ---------- Savings tile: this month on top, all-time total below ---------- */
+.kpi-split dd { display: grid; gap: 10px; font-size: inherit; letter-spacing: normal; font-weight: inherit; font-family: var(--font-ui); }
+.kpi-part { display: grid; gap: 2px; }
+.kpi-part + .kpi-part { padding-top: 10px; border-top: 1px solid var(--line); }
+.kpi-part-label { font-size: 0.72rem; color: var(--muted); }
+.kpi-value { font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; font-family: var(--font-num); }
+@media (max-width: 640px) {
+  .kpi-split { grid-template-columns: minmax(0, 1fr); }
+  .kpi-split dd { grid-column: 1; grid-row: auto; font-size: inherit; }
+  .kpi-part { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; }
+  .kpi-part .kpi-value { grid-column: 2; grid-row: 1 / span 2; font-size: 1.15rem; align-self: center; }
+}
+
+/* Savings tile ⋯ editors */
+.kpi-part-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kpi-more {
+  width: 32px; height: 28px; margin: -4px -6px -4px 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); font-size: 1.05rem; line-height: 1; cursor: pointer;
+}
+.kpi-more:hover, .kpi-more[aria-expanded="true"] { background: var(--surface-2); color: var(--ink); }
+.kpi-edit { display: grid; gap: 8px; margin-top: 6px; padding: 10px; border-radius: 8px; background: var(--surface-2); }
+.kpi-edit[hidden] { display: none; }
+.kpi-edit-modes { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.kpi-edit-modes button {
+  flex: 1; min-height: 34px; border: 0; background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 0.78rem; font-weight: 600; white-space: nowrap; padding: 0 6px; cursor: pointer;
+}
+.kpi-edit-modes button + button { border-left: 1px solid var(--line); }
+.kpi-edit-modes button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.kpi-edit-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.kpi-edit-row .money-input { flex: 1 1 100%; min-width: 0; }
+.kpi-edit-row .button { flex: 1 1 0; }
+@media (max-width: 640px) {
+  .kpi-split .kpi-part { grid-template-columns: minmax(0, 1fr) auto; }
+  .kpi-part-head { grid-column: 1; }
+  .kpi-part .kpi-sub { grid-column: 1; }
+  .kpi-edit { grid-column: 1 / -1; }
+}

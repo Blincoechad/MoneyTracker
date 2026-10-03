@@ -182,6 +182,12 @@ function calculateBudget(state, today) {
   // Bills you chose to pay from another source (like side savings) don't come out of your pay.
   const paychecks = planPaychecks(state, resolvedWeeks, year, monthIndex);
   const paidFromOther = paychecks.reduce((sum, plan) => sum + plan.fromOther, 0);
+  // Savings actually added: each paycheck's Savings line you've checked off.
+  const paid = state.paid ?? {};
+  const savedThisMonth = paychecks.reduce(
+    (sum, plan) => sum + plan.items.filter((item) => item.isSavings && paid[`${plan.key}|${item.id}`]).reduce((s, item) => s + item.amount, 0),
+    0
+  );
   const projectedRemaining = projectedIncome - monthlyExpenses - monthlySavings + paidFromOther;
 
   // --- Minimum weekly income (break-even if every week paid the same) ---
@@ -248,6 +254,7 @@ function calculateBudget(state, today) {
 
     paychecks,
     paidFromOther,
+    savedThisMonth,
   };
 }
 

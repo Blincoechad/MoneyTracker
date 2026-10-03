@@ -48,6 +48,8 @@ function createExampleState() {
     paid: {},
     otherSource: {},
     outsideBalance: "",
+    savedBefore: "",
+    savingsAdjust: 0,
     expenses: [
       { id: newId(), name: "Rent", amount: "700", frequency: "monthly", due: "1" },
       { id: newId(), name: "Internet", amount: "20", frequency: "monthly", due: "20" },
@@ -70,6 +72,8 @@ function createBlankState() {
     paid: {}, // "<payday>|<bill id>": true once you've marked it paid
     otherSource: {}, // "<payday>|<bill id>": true when that paycheck isn't paying it (side savings etc.)
     outsideBalance: "", // side savings balance; this month's "other source" bills come off it
+    savedBefore: "", // savings checked off in all earlier months, added up (plus your edits to the total)
+    savingsAdjust: 0, // money you added (+) or took out (−) of this month's savings by hand
     expenses: [],
     savings: { amount: "", frequency: "monthly" },
   };
@@ -202,7 +206,7 @@ function loadState() {
 // Returns true when a month was closed.
 function closeMonthIfNeeded(state) {
   if (state.actualsMonth === currentMonthKey()) return false;
-  spendOutsideSavings(state);
+  settleMonth(state);
   if (!state.isExample) {
     closedMonth = { key: state.actualsMonth, state: structuredClone(state) };
     monthNoticeText = "A new month started. Last month's weekly pay was saved to Monthly history and cleared. Your income, bills, and savings are unchanged.";
@@ -215,14 +219,24 @@ function closeMonthIfNeeded(state) {
   return true;
 }
 
-// When a month closes, the bills it paid from outside savings come off that balance for good,
-// since next month starts with none marked.
-function spendOutsideSavings(state) {
-  const balance = parseMoney(state.outsideBalance).value;
-  if (balance === null || !state.otherSource || Object.keys(state.otherSource).length === 0) return;
+// When a month closes, carry what it did forward before its checkmarks are cleared:
+// bills paid from outside savings come off that balance, and the savings you
+// checked off are added to your all-time total.
+function settleMonth(state) {
   const [year, month] = state.actualsMonth.split("-").map(Number);
-  const { paidFromOther } = calculateBudget({ ...state, currentWeek: 99 }, new Date(year, month, 0));
-  state.outsideBalance = String(Math.round((balance - paidFromOther) * 100) / 100);
+  const { paidFromOther, savedThisMonth } = calculateBudget({ ...state, currentWeek: 99 }, new Date(year, month, 0));
+  const round = (n) => String(Math.round(n * 100) / 100);
+  const balance = parseMoney(state.outsideBalance).value;
+  if (balance !== null && paidFromOther > 0) state.outsideBalance = round(balance - paidFromOther);
+  const addedThisMonth = savedThisMonth + amountOrZero(state.savingsAdjust);
+  if (addedThisMonth !== 0) state.savedBefore = round(amountOrZero(state.savedBefore) + addedThisMonth);
+  state.savingsAdjust = 0;
+}
+
+// Like moneyOrZero, but allows negatives (a total can go below zero after taking money out).
+function amountOrZero(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
 }
 
 // Older saves had an "Average month" mode with weeks keyed avg-1 … avg-4.
@@ -513,7 +527,15 @@ function renderKpis(r, base) {
   );
   const billCount = `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} this month`;
   setKpi("kpiExpenses", money(r.monthlyExpenses), r.paidFromOther > 0 ? `${billCount} · ${money(r.paidFromOther)} from other source` : billCount, b.monthlyExpenses, r.monthlyExpenses);
-  setKpi("kpiSavings", money(r.monthlySavings), "Set aside, not spent", b.monthlySavings, r.monthlySavings);
+  // Savings tile: checked-off savings plus any hand edits (⋯), then the all-time total.
+  const adjust = amountOrZero(activeState().savingsAdjust);
+  const addedThisMonth = r.savedThisMonth + adjust;
+  const totalSaved = amountOrZero(activeState().savedBefore) + addedThisMonth;
+  const planned = r.monthlySavings > 0 ? `of ${money(r.monthlySavings)} planned` : "No savings goal set";
+  setKpi("kpiSavings", money(addedThisMonth), clean(adjust) === 0 ? planned : `${planned} · ${signedMoney(adjust)} by hand`);
+  $("kpiSavings").classList.toggle("text-bad", addedThisMonth < -0.005);
+  $("kpiSavedTotal").textContent = money(totalSaved);
+  $("kpiSavedTotal").classList.toggle("text-bad", totalSaved < -0.005);
 }
 
 const CHECK_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>`;
@@ -953,7 +975,8 @@ function buildMonthReport(monthKey, state) {
     "",
     `Bills & expenses:    ${money(r.monthlyExpenses)}`,
     ...(r.paidFromOther > 0 ? [`  from other source: ${money(r.paidFromOther)}  (not from pay)`] : []),
-    `Savings:             ${money(r.monthlySavings)}`,
+    `Savings planned:     ${money(r.monthlySavings)}`,
+    `Savings added:       ${money(r.savedThisMonth)}  (checked off)`,
     `Remaining:           ${signedMoney(r.projectedRemaining)}`,
     ""
   );
@@ -1146,6 +1169,89 @@ document.addEventListener("change", (event) => {
 });
 
 /* ---------- Buttons ---------- */
+
+// Savings tile ⋯: open a small editor in that half to add, take out, or set an amount.
+function savingsForm(part) {
+  return document.querySelector(`[data-savings-form="${part}"]`);
+}
+
+function closeSavingsEditor(part, focusButton = true) {
+  const form = savingsForm(part);
+  if (!form || form.hidden) return;
+  form.hidden = true;
+  document.querySelector(`[data-savings-menu="${part}"]`).setAttribute("aria-expanded", "false");
+  if (focusButton) document.querySelector(`[data-savings-menu="${part}"]`).focus();
+}
+
+function openSavingsEditor(part) {
+  ["month", "total"].forEach((other) => other !== part && closeSavingsEditor(other, false));
+  const form = savingsForm(part);
+  form.hidden = false;
+  form.querySelector("input").value = "";
+  form.querySelector(".field-error").textContent = "";
+  setSavingsMode(form, "add");
+  document.querySelector(`[data-savings-menu="${part}"]`).setAttribute("aria-expanded", "true");
+  form.querySelector("input").focus();
+}
+
+function setSavingsMode(form, mode) {
+  form.dataset.mode = mode;
+  form.querySelectorAll("[data-savings-mode]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.savingsMode === mode)));
+}
+
+document.addEventListener("click", (event) => {
+  const menu = event.target.closest("[data-savings-menu]");
+  const modeButton = event.target.closest("[data-savings-mode]");
+  const cancel = event.target.closest("[data-savings-cancel]");
+  if (menu) {
+    const part = menu.dataset.savingsMenu;
+    if (savingsForm(part).hidden) openSavingsEditor(part);
+    else closeSavingsEditor(part);
+  } else if (modeButton) {
+    setSavingsMode(modeButton.closest("form"), modeButton.dataset.savingsMode);
+    modeButton.closest("form").querySelector("input").focus();
+  } else if (cancel) {
+    closeSavingsEditor(cancel.closest("form").dataset.savingsForm);
+  }
+});
+
+document.addEventListener("submit", (event) => {
+  const form = event.target.closest("[data-savings-form]");
+  if (!form) return;
+  event.preventDefault();
+  const input = form.querySelector("input");
+  const { value, error } = parseMoney(input.value);
+  if (error || value === null) {
+    form.querySelector(".field-error").textContent = error || "Enter an amount, like 100 or 100.50";
+    input.focus();
+    return;
+  }
+
+  const state = activeState();
+  const part = form.dataset.savingsForm;
+  const mode = form.dataset.mode;
+  const round = (n) => Math.round(n * 100) / 100;
+  const checked = calculate(state).savedThisMonth;
+  const thisMonth = checked + amountOrZero(state.savingsAdjust);
+  if (part === "month") {
+    // Kept apart from the checkmarks, so checking a week's Savings still adds $50 on top.
+    const adjust = amountOrZero(state.savingsAdjust);
+    state.savingsAdjust = round(mode === "add" ? adjust + value : mode === "remove" ? adjust - value : value - checked);
+  } else {
+    // The total is earlier months (savedBefore) plus this month, so edits land in savedBefore.
+    const before = amountOrZero(state.savedBefore);
+    state.savedBefore = String(round(mode === "add" ? before + value : mode === "remove" ? before - value : value - thisMonth));
+  }
+  if (!scenario) baseline.isExample = false;
+  closeSavingsEditor(part);
+  refresh();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const open = ["month", "total"].find((part) => !savingsForm(part).hidden);
+  if (open) closeSavingsEditor(open);
+});
 
 // A bill's ⋯ menu: open/close it, or move the bill off (or back onto) this paycheck.
 // The lists redraw on every change, so focus is put back on the matching button.

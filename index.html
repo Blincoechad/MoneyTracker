@@ -127,10 +127,58 @@
             <dd id="kpiExpenses">$0.00</dd>
             <p class="kpi-sub" id="kpiExpensesSub"></p>
           </div>
-          <div class="kpi">
-            <dt><span class="kpi-op" aria-hidden="true">−</span> Savings</dt>
-            <dd id="kpiSavings">$0.00</dd>
-            <p class="kpi-sub" id="kpiSavingsSub"></p>
+          <div class="kpi kpi-split">
+            <dt>Savings</dt>
+            <dd>
+              <div class="kpi-part" data-savings-part="month">
+                <div class="kpi-part-head">
+                  <span class="kpi-part-label">Added this month</span>
+                  <button type="button" class="kpi-more" data-savings-menu="month" aria-label="Change added this month" aria-expanded="false" aria-controls="savingsEditMonth">⋯</button>
+                </div>
+                <span class="kpi-value" id="kpiSavings">$0.00</span>
+                <span class="kpi-sub" id="kpiSavingsSub"></span>
+                <form class="kpi-edit" id="savingsEditMonth" data-savings-form="month" hidden>
+                  <div class="kpi-edit-modes" role="group" aria-label="What to do">
+                    <button type="button" data-savings-mode="add" aria-pressed="true">Add</button>
+                    <button type="button" data-savings-mode="remove" aria-pressed="false">Take out</button>
+                    <button type="button" data-savings-mode="set" aria-pressed="false">Set</button>
+                  </div>
+                  <div class="kpi-edit-row">
+                    <div class="money-input">
+                      <span aria-hidden="true">$</span>
+                      <input type="text" inputmode="decimal" autocomplete="off" id="savingsEditMonthAmount" aria-label="Amount" placeholder="0.00" />
+                    </div>
+                    <button type="submit" class="button button-small">Save</button>
+                    <button type="button" class="button button-small button-quiet" data-savings-cancel>Cancel</button>
+                  </div>
+                  <p class="field-error" id="savingsEditMonthAmountError" role="alert"></p>
+                </form>
+              </div>
+              <div class="kpi-part" data-savings-part="total">
+                <div class="kpi-part-head">
+                  <span class="kpi-part-label">Total saved</span>
+                  <button type="button" class="kpi-more" data-savings-menu="total" aria-label="Change total saved" aria-expanded="false" aria-controls="savingsEditTotal">⋯</button>
+                </div>
+                <span class="kpi-value" id="kpiSavedTotal">$0.00</span>
+                <span class="kpi-sub">All months added up</span>
+                <form class="kpi-edit" id="savingsEditTotal" data-savings-form="total" hidden>
+                  <div class="kpi-edit-modes" role="group" aria-label="What to do">
+                    <button type="button" data-savings-mode="add" aria-pressed="true">Add</button>
+                    <button type="button" data-savings-mode="remove" aria-pressed="false">Take out</button>
+                    <button type="button" data-savings-mode="set" aria-pressed="false">Set</button>
+                  </div>
+                  <div class="kpi-edit-row">
+                    <div class="money-input">
+                      <span aria-hidden="true">$</span>
+                      <input type="text" inputmode="decimal" autocomplete="off" id="savingsEditTotalAmount" aria-label="Amount" placeholder="0.00" />
+                    </div>
+                    <button type="submit" class="button button-small">Save</button>
+                    <button type="button" class="button button-small button-quiet" data-savings-cancel>Cancel</button>
+                  </div>
+                  <p class="field-error" id="savingsEditTotalAmountError" role="alert"></p>
+                </form>
+              </div>
+            </dd>
           </div>
         </dl>
       </section>
