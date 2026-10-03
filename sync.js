@@ -23,7 +23,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, onSnapshot, setDoc,
-  terminate, clearIndexedDbPersistence,
+  terminate, clearIndexedDbPersistence, waitForPendingWrites,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 const PARTS = ["budget", "history"];
@@ -54,6 +54,7 @@ function start() {
   let unsubscribe = null;
   let timers = {};
   let waiting = 0; // sends not yet confirmed by the server
+  let flushPending = () => {}; // sends any change still waiting out its typing pause
   syncArea.hidden = false;
   setStatus("Checking sign-in…");
 
@@ -65,7 +66,25 @@ function start() {
 
   syncButton.addEventListener("click", async () => {
     if (auth.currentUser) {
-      // Sign out, then wipe this device: the budget (back to $0) and Firestore's offline copy.
+      // Make sure the cloud has everything first: send what's waiting, then wait for the
+      // server to confirm it. Offline, or no answer in 8 seconds, means it isn't saved yet.
+      syncButton.disabled = true;
+      setStatus("Saving before sign-out…");
+      flushPending();
+      const saved = await Promise.race([
+        waitForPendingWrites(db).then(() => true, () => false),
+        new Promise((resolve) => setTimeout(() => resolve(false), navigator.onLine ? 8000 : 0)),
+      ]);
+      if (!saved && !window.confirm(
+        "Some of your latest changes haven't reached the cloud yet (you may be offline). " +
+        "Signing out now erases them from this device. Sign out anyway?"
+      )) {
+        syncButton.disabled = false;
+        setStatus(idleStatus());
+        return;
+      }
+
+      // Sign out, then wipe this device: the budget and Firestore's offline copy.
       setStatus("Signing out…");
       await signOut(auth);
       window.budgetApp.resetForSignOut();
@@ -107,25 +126,32 @@ function start() {
     setStatus("Connecting…");
     const ref = doc(db, "users", user.uid);
 
+    // Send one part now. setDoc queues the write at once (offline too) and settles when the server confirms.
+    async function sendNow(part) {
+      clearTimeout(timers[part]);
+      delete timers[part];
+      const local = window.budgetApp.getLocal();
+      waiting += 1;
+      setStatus(idleStatus());
+      try {
+        await setDoc(ref, { [part]: local[part], [`${part}UpdatedAt`]: local[`${part}UpdatedAt`] }, { merge: true });
+      } catch (error) {
+        setStatus("Couldn't save to the cloud");
+        console.error(error);
+        return;
+      } finally {
+        waiting -= 1;
+      }
+      setStatus(idleStatus());
+    }
+
+    // After a change, wait for a pause in typing before sending.
     function push(part) {
       clearTimeout(timers[part]);
-      timers[part] = setTimeout(async () => {
-        const local = window.budgetApp.getLocal();
-        waiting += 1;
-        setStatus(idleStatus());
-        try {
-          await setDoc(ref, { [part]: local[part], [`${part}UpdatedAt`]: local[`${part}UpdatedAt`] }, { merge: true });
-        } catch (error) {
-          setStatus("Couldn't save to the cloud");
-          console.error(error);
-          return;
-        } finally {
-          waiting -= 1;
-        }
-        setStatus(idleStatus());
-      }, PUSH_DELAY_MS);
+      timers[part] = setTimeout(() => sendNow(part), PUSH_DELAY_MS);
     }
     window.budgetCloud = { push };
+    flushPending = () => Object.keys(timers).forEach(sendNow);
 
     // includeMetadataChanges: also hear when a cached copy is confirmed by the server.
     unsubscribe = onSnapshot(
