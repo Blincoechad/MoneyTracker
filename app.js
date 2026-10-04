@@ -47,7 +47,7 @@ function createExampleState() {
     actuals: { [firstPayday.key]: "425" },
     paid: {},
     otherSource: {},
-    leftNow: {},
+    leftNow: "",
     outsideBalance: "",
     savedBefore: "",
     savingsAdjust: 0,
@@ -72,7 +72,7 @@ function createBlankState() {
     actuals: {},
     paid: {}, // "<payday>|<bill id>": true once you've marked it paid
     otherSource: {}, // "<payday>|<bill id>": true when that paycheck isn't paying it (side savings etc.)
-    leftNow: {}, // "<payday>": what you typed into "Left from this check" for that paycheck
+    leftNow: "", // what you last typed into "Left from this check"; stays until you change it
     outsideBalance: "", // side savings balance; this month's "other source" bills come off it
     savedBefore: "", // savings checked off in all earlier months, added up (plus your edits to the total)
     savingsAdjust: 0, // money you added (+) or took out (−) of this month's savings by hand
@@ -234,7 +234,12 @@ function loadState() {
   state.actuals = saved.actuals && typeof saved.actuals === "object" ? saved.actuals : {};
   state.paid = saved.paid && typeof saved.paid === "object" ? saved.paid : {};
   state.otherSource = saved.otherSource && typeof saved.otherSource === "object" ? saved.otherSource : {};
-  state.leftNow = saved.leftNow && typeof saved.leftNow === "object" ? saved.leftNow : {};
+  // Older saves kept one amount per payday; carry the most recent one over.
+  if (saved.leftNow && typeof saved.leftNow === "object") {
+    state.leftNow = saved.leftNow[Object.keys(saved.leftNow).sort().pop()] ?? "";
+  } else {
+    state.leftNow = typeof saved.leftNow === "string" ? saved.leftNow : "";
+  }
   migrateAverageWeeks(state);
   closeMonthIfNeeded(state);
   return state;
@@ -253,7 +258,6 @@ function closeMonthIfNeeded(state) {
   state.actuals = {};
   state.paid = {};
   state.otherSource = {};
-  state.leftNow = {};
   state.actualsMonth = currentMonthKey();
   state.currentWeek = "auto";
   return true;
@@ -556,12 +560,11 @@ function setKpi(id, valueText, subText, baseValue, currentValue) {
 // Lower half of the Income tile: of what's left from this check, how much is free to spend.
 function renderCanSpend(r, state) {
   const week = latestPaydayWeek(r.weeks) ?? r.weeks[0];
-  const room = spendingRoom(r.weeks, r.paychecks, week.index, state.paid, state.leftNow?.[week.key]);
+  const room = spendingRoom(r.weeks, r.paychecks, week.index, state.paid, state.leftNow);
 
   const input = $("leftNow");
-  if (input.dataset.leftKey !== week.key || document.activeElement !== input) {
-    input.dataset.leftKey = week.key;
-    input.value = state.leftNow?.[week.key] ?? "";
+  if (document.activeElement !== input) {
+    input.value = state.leftNow ?? "";
     validateAmount(input);
   }
   // With the box empty, the plan's number stands in: the paycheck minus the bills checked off so far.
@@ -770,34 +773,6 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") showThisWeek();
 });
 window.addEventListener("pageshow", showThisWeek);
-
-// Phones show "Left from this check" as a second hero card you swipe to;
-// wider screens keep it in the lower half of the Income tile.
-const phoneLayout = window.matchMedia("(max-width: 640px)");
-
-function placeLeftNow() {
-  const home = phoneLayout.matches ? $("heroLeft") : $("kpiIncome").closest("dd");
-  home.append(document.querySelector(".kpi-left"));
-}
-phoneLayout.addEventListener("change", placeLeftNow);
-placeLeftNow();
-
-$("heroSwipe").addEventListener("scroll", () => {
-  const strip = $("heroSwipe");
-  const index = strip.scrollLeft > (strip.scrollWidth - strip.clientWidth) / 2 ? 1 : 0;
-  [...$("heroDots").children].forEach((dot, i) => dot.classList.toggle("is-active", i === index));
-  $("heroPrev").disabled = index === 0;
-  $("heroNext").disabled = index === 1;
-}, { passive: true });
-
-// The Prev/Next buttons slide between the two cards, same as a swipe.
-function slideHero(toSecond) {
-  const strip = $("heroSwipe");
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  strip.scrollTo({ left: toSecond ? strip.scrollWidth : 0, behavior: reduceMotion ? "auto" : "smooth" });
-}
-$("heroPrev").addEventListener("click", () => slideHero(false));
-$("heroNext").addEventListener("click", () => slideHero(true));
 
 function renderExpenseMonthly(r) {
   r.expenseLines.forEach((line) => {
@@ -1277,9 +1252,7 @@ function handleChange(event) {
   } else if (el.id === "currentWeek") {
     state.currentWeek = el.value;
   } else if (el.id === "leftNow") {
-    state.leftNow ??= {};
-    if (el.value.trim() === "") delete state.leftNow[el.dataset.leftKey];
-    else state.leftNow[el.dataset.leftKey] = el.value;
+    state.leftNow = el.value.trim() === "" ? "" : el.value;
     validateAmount(el);
   } else if (el.dataset.weekKey) {
     const text = el.value.trim();

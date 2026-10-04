@@ -172,28 +172,14 @@
 
       <!-- ===================== SUMMARY: the answer first ===================== -->
       <section class="hero" id="hero" aria-live="polite">
-        <!-- Phones: these two cards swipe sideways. Wider screens show only the first;
-             "Left from this check" sits in the Income tile instead (app.js moves it). -->
-        <div class="hero-top">
-          <div class="hero-swipe" id="heroSwipe">
-            <div class="hero-status">
-              <div class="hero-head">
-                <span id="statusPill" class="pill">Positive</span>
-                <span class="eyebrow">Projected remaining this month</span>
-              </div>
-              <p id="heroRemaining" class="hero-number">$0.00</p>
-              <p id="heroDelta" class="hero-delta" hidden></p>
-              <p id="heroMessage" class="hero-message"></p>
-            </div>
-            <div class="hero-status hero-left" id="heroLeft"></div>
+        <div class="hero-status">
+          <div class="hero-head">
+            <span id="statusPill" class="pill">Positive</span>
+            <span class="eyebrow">Projected remaining this month</span>
           </div>
-          <div class="paycheck-nav hero-nav">
-            <button type="button" id="heroPrev" class="button button-outline button-small" aria-controls="heroSwipe" aria-label="Previous card" disabled>‹ Prev</button>
-            <div class="paycheck-dots hero-dots" id="heroDots" aria-hidden="true">
-              <span class="is-active"></span><span></span>
-            </div>
-            <button type="button" id="heroNext" class="button button-outline button-small" aria-controls="heroSwipe" aria-label="Next card">Next ›</button>
-          </div>
+          <p id="heroRemaining" class="hero-number">$0.00</p>
+          <p id="heroDelta" class="hero-delta" hidden></p>
+          <p id="heroMessage" class="hero-message"></p>
         </div>
 
         <dl class="kpis">
