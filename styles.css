@@ -595,11 +595,23 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
   .this-week { grid-template-columns: minmax(0, 1fr); row-gap: 16px; }
 }
 
-/* Phones: fold the paycheck list to this week's card until "Show all" is tapped */
-.paychecks-toggle { display: none; justify-self: center; }
+/* Phones: the paycheck list is one card wide; swipe sideways to move between weeks */
+.paycheck-nav { display: none; align-items: center; justify-content: space-between; gap: 12px; }
+.paycheck-nav .button { min-height: 44px; }
+.paycheck-nav .button:disabled { opacity: 0.4; cursor: default; }
+.paycheck-dots { display: flex; justify-content: center; gap: 8px; }
+.paycheck-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.paycheck-dots span.is-active { background: var(--accent); }
 @media (max-width: 640px) {
-  .paychecks-toggle { display: inline-block; }
-  .paycheck-list:not(.is-expanded) .paycheck:not(.is-focus) { display: none; }
+  .paycheck-nav { display: flex; }
+  /* The list bleeds out to the panel's edges so card shadows aren't clipped and the next card stays out of sight. */
+  .paycheck-list {
+    display: flex; gap: 24px; margin: -6px -20px -8px; padding: 6px 20px 14px;
+    overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 20px;
+    overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .paycheck-list::-webkit-scrollbar { display: none; }
+  .paycheck { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
 }
 
 /* ---------- Bill ⋯ menu: pay from other source ---------- */

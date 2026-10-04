@@ -632,7 +632,7 @@ function billListHtml(plan, state, area) {
 function renderWeeks(r, state) {
   const statusText = { actual: "Actual", assumed: "Past · assumed", open: "Upcoming" };
   const thisWeek = latestPaydayWeek(r.weeks);
-  const focusWeek = thisWeek ?? r.weeks[0]; // the card a folded list shows on phones
+  const focusWeek = thisWeek ?? r.weeks[0]; // the card phones open on
 
   r.weeks.forEach((week, i) => {
     const card = document.querySelector(`[data-week-row="${week.index}"]`);
@@ -676,23 +676,64 @@ function renderWeeks(r, state) {
   const monthName = new Date().toLocaleDateString("en-US", { month: "long" });
   const count = r.weeks.length;
   $("weeksHeading").textContent = `${count} paychecks in ${monthName}`;
-  renderPaychecksToggle(count);
+  $("weekDots").innerHTML = "<span></span>".repeat(count);
+  showWeek();
   $("weekCountHint").textContent = `${monthName} has ${count} ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}, so this is a ${count}-week month.`;
 }
 
-// On phones the paycheck list folds to this week's card; this button opens the rest.
-let paychecksExpanded = false;
+// On phones the paycheck list shows one card at a time and swipes sideways.
+// shownWeek is the card on screen; null means "this week's", which is where every visit starts.
+let shownWeek = null;
 
-function renderPaychecksToggle(count) {
-  $("weekList").classList.toggle("is-expanded", paychecksExpanded);
-  $("paychecksToggle").setAttribute("aria-expanded", String(paychecksExpanded));
-  $("paychecksToggle").textContent = paychecksExpanded ? "Show only this week ▴" : `Show all ${count} paychecks ▾`;
+function showWeek() {
+  const list = $("weekList");
+  const cards = [...list.children];
+  if (!cards.length) return;
+  const focus = cards.findIndex((card) => card.classList.contains("is-focus"));
+  const index = Math.min(shownWeek ?? Math.max(focus, 0), cards.length - 1);
+  const left = cards[index].offsetLeft - cards[0].offsetLeft;
+  if (Math.abs(list.scrollLeft - left) > 1) list.scrollLeft = left;
+  renderWeekDots(index);
 }
 
-$("paychecksToggle").addEventListener("click", () => {
-  paychecksExpanded = !paychecksExpanded;
-  renderPaychecksToggle(calculate(activeState()).weeks.length);
+function renderWeekDots(index) {
+  const dots = [...$("weekDots").children];
+  dots.forEach((dot, i) => dot.classList.toggle("is-active", i === index));
+  $("weekPrev").disabled = index <= 0;
+  $("weekNext").disabled = index >= dots.length - 1;
+}
+
+// The Prev/Next buttons slide one card over, same as a swipe.
+function stepWeek(step) {
+  const list = $("weekList");
+  const cards = [...list.children];
+  const current = [...$("weekDots").children].findIndex((dot) => dot.classList.contains("is-active"));
+  const target = cards[current + step];
+  if (!target) return;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  list.scrollTo({ left: target.offsetLeft - cards[0].offsetLeft, behavior: reduceMotion ? "auto" : "smooth" });
+}
+$("weekPrev").addEventListener("click", () => stepWeek(-1));
+$("weekNext").addEventListener("click", () => stepWeek(1));
+
+$("weekList").addEventListener("scroll", () => {
+  const list = $("weekList");
+  const cards = [...list.children];
+  if (!cards.length || list.scrollWidth <= list.clientWidth) return;
+  const offsets = cards.map((card) => Math.abs(card.offsetLeft - cards[0].offsetLeft - list.scrollLeft));
+  shownWeek = offsets.indexOf(Math.min(...offsets));
+  renderWeekDots(shownWeek);
+}, { passive: true });
+
+// Coming back to the app always lands on this week's paycheck.
+function showThisWeek() {
+  shownWeek = null;
+  showWeek();
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") showThisWeek();
 });
+window.addEventListener("pageshow", showThisWeek);
 
 function renderExpenseMonthly(r) {
   r.expenseLines.forEach((line) => {

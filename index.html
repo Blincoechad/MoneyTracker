@@ -406,14 +406,12 @@
           </p>
         </div>
         <div id="weekList" class="paycheck-list"></div>
-        <!-- Phones only: the list starts folded to this week's paycheck -->
-        <button
-          type="button"
-          id="paychecksToggle"
-          class="button button-outline button-small paychecks-toggle"
-          aria-controls="weekList"
-          aria-expanded="false"
-        ></button>
+        <!-- Phones only: swipe the list sideways or use the buttons; the dots show which paycheck is on screen -->
+        <div class="paycheck-nav">
+          <button type="button" id="weekPrev" class="button button-outline button-small" aria-controls="weekList">‹ Prev week</button>
+          <div id="weekDots" class="paycheck-dots" aria-hidden="true"></div>
+          <button type="button" id="weekNext" class="button button-outline button-small" aria-controls="weekList">Next week ›</button>
+        </div>
       </section>
 
       <div class="layout">
