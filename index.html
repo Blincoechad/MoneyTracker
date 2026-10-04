@@ -183,10 +183,32 @@
         </div>
 
         <dl class="kpis">
-          <div class="kpi">
+          <div class="kpi kpi-split">
             <dt>Income this month</dt>
-            <dd id="kpiIncome">$0.00</dd>
-            <p class="kpi-sub" id="kpiIncomeSub"></p>
+            <dd>
+              <div class="kpi-part">
+                <span class="kpi-value" id="kpiIncome">$0.00</span>
+                <span class="kpi-sub" id="kpiIncomeSub"></span>
+              </div>
+              <!-- What you have from this paycheck, and how much of it is safe to spend -->
+              <div class="kpi-part kpi-left">
+                <label class="kpi-part-label" for="leftNow">Left from this check</label>
+                <div class="money-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    id="leftNow"
+                    aria-describedby="kpiCanSpendSub"
+                  />
+                </div>
+                <p class="field-error" id="leftNow-error" role="alert"></p>
+                <span class="kpi-part-label kpi-left-label">Can spend</span>
+                <span class="kpi-value" id="kpiCanSpend">$0.00</span>
+                <span class="kpi-sub" id="kpiCanSpendSub"></span>
+              </div>
+            </dd>
           </div>
           <div class="kpi">
             <dt>

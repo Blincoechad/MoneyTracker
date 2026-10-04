@@ -347,7 +347,42 @@ function planPaychecks(state, weeks, year, monthIndex) {
   });
 }
 
+/* ---------------------------------------------------------------------
+   7. WHAT YOU CAN SPEND RIGHT NOW
+   Takes the money you have from the current paycheck and holds back
+   whatever is already spoken for:
+     - this paycheck's bills you haven't checked off yet
+     - the deepest hole later paychecks fall into (a rent week that
+       costs more than that week's pay has to be covered from now)
+   haveText is what you typed into "Left from this check"; when blank,
+   it's the paycheck minus the bills already checked off.
+   --------------------------------------------------------------------- */
+function spendingRoom(weeks, paychecks, weekIndex, paid, haveText) {
+  const unpaid = (plan) => plan.items.reduce(
+    (sum, item) => sum + (item.fromOther || paid[`${plan.key}|${item.id}`] ? 0 : item.amount), 0);
+
+  const dueNow = unpaid(paychecks[weekIndex]);
+  const paidNow = paychecks[weekIndex].out - dueNow;
+  const have = parseMoney(haveText).value ?? weeks[weekIndex].amountUsed - paidNow;
+
+  let running = 0;
+  let lowest = 0;
+  let shortIndex = null; // the later paycheck where the hole is deepest
+  for (let i = weekIndex + 1; i < paychecks.length; i++) {
+    running += weeks[i].amountUsed - unpaid(paychecks[i]);
+    if (running < lowest - 0.005) {
+      lowest = running;
+      shortIndex = i;
+    }
+  }
+
+  const round = (n) => Math.round(n * 100) / 100;
+  const keepLater = round(0 - lowest);
+  const keep = round(dueNow + keepLater);
+  return { have: round(have), dueNow: round(dueNow), keepLater, shortIndex, keep, canSpend: round(have - keep) };
+}
+
 // Lets Node load this file for testing; browsers simply skip this line.
 if (typeof module !== "undefined") {
-  module.exports = { parseMoney, toMonthly, monthlyAmount, buildWeeks, resolveWeeks, calculateBudget, planPaychecks, dueDaysInMonth };
+  module.exports = { parseMoney, toMonthly, monthlyAmount, buildWeeks, resolveWeeks, calculateBudget, planPaychecks, dueDaysInMonth, spendingRoom };
 }

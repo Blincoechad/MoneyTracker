@@ -708,6 +708,18 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
   .kpi-edit { grid-column: 1 / -1; }
 }
 
+/* ---------- Income tile, lower half: what's left from this check and how much of it is free ---------- */
+.kpi-left { gap: 4px; }
+.kpi-left .money-input input { width: 100%; min-height: 40px; }
+.kpi-left .field-error:empty { display: none; }
+.kpi-left-label { margin-top: 6px; }
+@media (max-width: 640px) {
+  /* Label on the left, box or number on the right; the explanation runs full width below. */
+  .kpi-split .kpi-left { grid-template-columns: minmax(0, 1fr) minmax(0, 9rem); align-items: center; row-gap: 6px; }
+  .kpi-left .field-error, .kpi-left .kpi-sub { grid-column: 1 / -1; }
+  .kpi-left .kpi-value { grid-column: 2; grid-row: auto; justify-self: end; }
+  .kpi-left-label { margin-top: 0; }
+}
 /* =====================================================================
    STYLE SWITCH (both looks) — the slider beside "Personal Budget"
    ===================================================================== */

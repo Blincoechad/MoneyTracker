@@ -47,6 +47,7 @@ function createExampleState() {
     actuals: { [firstPayday.key]: "425" },
     paid: {},
     otherSource: {},
+    leftNow: {},
     outsideBalance: "",
     savedBefore: "",
     savingsAdjust: 0,
@@ -71,6 +72,7 @@ function createBlankState() {
     actuals: {},
     paid: {}, // "<payday>|<bill id>": true once you've marked it paid
     otherSource: {}, // "<payday>|<bill id>": true when that paycheck isn't paying it (side savings etc.)
+    leftNow: {}, // "<payday>": what you typed into "Left from this check" for that paycheck
     outsideBalance: "", // side savings balance; this month's "other source" bills come off it
     savedBefore: "", // savings checked off in all earlier months, added up (plus your edits to the total)
     savingsAdjust: 0, // money you added (+) or took out (−) of this month's savings by hand
@@ -232,6 +234,7 @@ function loadState() {
   state.actuals = saved.actuals && typeof saved.actuals === "object" ? saved.actuals : {};
   state.paid = saved.paid && typeof saved.paid === "object" ? saved.paid : {};
   state.otherSource = saved.otherSource && typeof saved.otherSource === "object" ? saved.otherSource : {};
+  state.leftNow = saved.leftNow && typeof saved.leftNow === "object" ? saved.leftNow : {};
   migrateAverageWeeks(state);
   closeMonthIfNeeded(state);
   return state;
@@ -250,6 +253,7 @@ function closeMonthIfNeeded(state) {
   state.actuals = {};
   state.paid = {};
   state.otherSource = {};
+  state.leftNow = {};
   state.actualsMonth = currentMonthKey();
   state.currentWeek = "auto";
   return true;
@@ -549,6 +553,37 @@ function setKpi(id, valueText, subText, baseValue, currentValue) {
   }
 }
 
+// Lower half of the Income tile: of what's left from this check, how much is free to spend.
+function renderCanSpend(r, state) {
+  const week = latestPaydayWeek(r.weeks) ?? r.weeks[0];
+  const room = spendingRoom(r.weeks, r.paychecks, week.index, state.paid, state.leftNow?.[week.key]);
+
+  const input = $("leftNow");
+  if (input.dataset.leftKey !== week.key || document.activeElement !== input) {
+    input.dataset.leftKey = week.key;
+    input.value = state.leftNow?.[week.key] ?? "";
+    validateAmount(input);
+  }
+  // With the box empty, the plan's number stands in: the paycheck minus the bills checked off so far.
+  const planHave = spendingRoom(r.weeks, r.paychecks, week.index, state.paid, "").have;
+  input.placeholder = Math.max(0, planHave).toFixed(2);
+
+  const next = r.weeks[week.index + 1];
+  const nextDate = next ? new Date(`${next.key}T12:00:00`) : new Date(new Date(`${week.key}T12:00:00`).getTime() + 7 * 86_400_000);
+  const reasons = [];
+  if (room.dueNow > 0.005) reasons.push(`${money(room.dueNow)} for this week's unpaid bills`);
+  if (room.keepLater > 0.005) reasons.push(`${money(room.keepLater)} for ${weekLabel(r.weeks[room.shortIndex]).name}, which runs short`);
+
+  const short = room.canSpend < -0.005;
+  $("kpiCanSpend").textContent = money(Math.max(0, room.canSpend));
+  $("kpiCanSpend").className = `kpi-value ${short ? "text-bad" : "text-good"}`;
+  $("kpiCanSpendSub").textContent = reasons.length === 0
+    ? `Nothing to hold back. It's all yours until ${shortDate(nextDate)}.`
+    : short
+      ? `You're ${money(-room.canSpend)} under what you need to keep: ${reasons.join(" + ")}.`
+      : `Keep ${money(room.keep)}: ${reasons.join(" + ")}.`;
+}
+
 function renderKpis(r, base) {
   const b = base ?? {};
   const vsPlan = r.projectedIncome - r.baselineMonthlyIncome;
@@ -561,6 +596,7 @@ function renderKpis(r, base) {
     b.projectedIncome,
     r.projectedIncome
   );
+  renderCanSpend(r, activeState());
   const billCount = `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} this month`;
   setKpi("kpiExpenses", money(r.monthlyExpenses), r.paidFromOther > 0 ? `${billCount} · ${money(r.paidFromOther)} from other source` : billCount, b.monthlyExpenses, r.monthlyExpenses);
   // Savings tile: checked-off savings plus any hand edits (⋯), then the all-time total.
@@ -777,9 +813,11 @@ function renderThisWeek(r, state) {
   // Until the next payday: the next card, or a week after the last one (next month's first).
   const next = r.weeks[week.index + 1];
   const nextDate = next ? new Date(`${next.key}T12:00:00`) : new Date(new Date(`${week.key}T12:00:00`).getTime() + 7 * 86_400_000);
+  // When a later check runs short, not all of this is spendable; the Income tile says how much is.
+  const laterShort = spendingRoom(r.weeks, r.paychecks, week.index, state.paid, "").keepLater > 0.005;
   $("thisWeekSpend").innerHTML = plan.items.length === 0
     ? `Nothing due from this paycheck. All ${money(week.amountUsed)} is yours until ${shortDate(nextDate)}.`
-    : `${money(week.amountUsed)} − ${money(plan.out)} = <strong class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</strong> ${plan.left < -0.005 ? "short" : "to spend"} until ${shortDate(nextDate)}${plan.fromOther > 0 ? ` <span class="hint">(${money(plan.fromOther)} paid from other source)</span>` : ""}`;
+    : `${money(week.amountUsed)} − ${money(plan.out)} = <strong class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</strong> ${plan.left < -0.005 ? "short" : laterShort ? "left" : "to spend"} until ${shortDate(nextDate)}${plan.fromOther > 0 ? ` <span class="hint">(${money(plan.fromOther)} paid from other source)</span>` : ""}`;
 }
 
 function renderNeeds(r) {
@@ -1210,6 +1248,11 @@ function handleChange(event) {
     structureChanged = true;
   } else if (el.id === "currentWeek") {
     state.currentWeek = el.value;
+  } else if (el.id === "leftNow") {
+    state.leftNow ??= {};
+    if (el.value.trim() === "") delete state.leftNow[el.dataset.leftKey];
+    else state.leftNow[el.dataset.leftKey] = el.value;
+    validateAmount(el);
   } else if (el.dataset.weekKey) {
     const text = el.value.trim();
     if (text === "") delete state.actuals[el.dataset.weekKey];
