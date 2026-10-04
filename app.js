@@ -771,6 +771,34 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("pageshow", showThisWeek);
 
+// Phones show "Left from this check" as a second hero card you swipe to;
+// wider screens keep it in the lower half of the Income tile.
+const phoneLayout = window.matchMedia("(max-width: 640px)");
+
+function placeLeftNow() {
+  const home = phoneLayout.matches ? $("heroLeft") : $("kpiIncome").closest("dd");
+  home.append(document.querySelector(".kpi-left"));
+}
+phoneLayout.addEventListener("change", placeLeftNow);
+placeLeftNow();
+
+$("heroSwipe").addEventListener("scroll", () => {
+  const strip = $("heroSwipe");
+  const index = strip.scrollLeft > (strip.scrollWidth - strip.clientWidth) / 2 ? 1 : 0;
+  [...$("heroDots").children].forEach((dot, i) => dot.classList.toggle("is-active", i === index));
+  $("heroPrev").disabled = index === 0;
+  $("heroNext").disabled = index === 1;
+}, { passive: true });
+
+// The Prev/Next buttons slide between the two cards, same as a swipe.
+function slideHero(toSecond) {
+  const strip = $("heroSwipe");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  strip.scrollTo({ left: toSecond ? strip.scrollWidth : 0, behavior: reduceMotion ? "auto" : "smooth" });
+}
+$("heroPrev").addEventListener("click", () => slideHero(false));
+$("heroNext").addEventListener("click", () => slideHero(true));
+
 function renderExpenseMonthly(r) {
   r.expenseLines.forEach((line) => {
     const cell = document.querySelector(`[data-expense-row="${line.id}"] [data-role="monthly"]`);

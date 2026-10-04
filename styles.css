@@ -597,7 +597,7 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 
 /* Phones: the paycheck list is one card wide; swipe sideways to move between weeks */
 .paycheck-nav { display: none; align-items: center; justify-content: space-between; gap: 12px; }
-.paycheck-nav .button { min-height: 44px; }
+.paycheck-nav .button { min-height: 44px; white-space: nowrap; }
 .paycheck-nav .button:disabled { opacity: 0.4; cursor: default; }
 .paycheck-dots { display: flex; justify-content: center; gap: 8px; }
 .paycheck-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
@@ -713,13 +713,33 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 .kpi-left .money-input input { width: 100%; min-height: 40px; }
 .kpi-left .field-error:empty { display: none; }
 .kpi-left-label { margin-top: 6px; }
+
+/* Phones: "Left from this check" leaves the Income tile and becomes a second hero card you swipe to. */
+.hero-top, .hero-swipe { display: grid; min-width: 0; }
+.hero-status.hero-left, .hero-dots { display: none; }
 @media (max-width: 640px) {
-  /* Label on the left, box or number on the right; the explanation runs full width below. */
-  .kpi-split .kpi-left { grid-template-columns: minmax(0, 1fr) minmax(0, 9rem); align-items: center; row-gap: 6px; }
-  .kpi-left .field-error, .kpi-left .kpi-sub { grid-column: 1 / -1; }
-  .kpi-left .kpi-value { grid-column: 2; grid-row: auto; justify-self: end; }
-  .kpi-left-label { margin-top: 0; }
+  .hero-top { gap: 8px; }
+  /* The strip bleeds a little past its edges so the cards' shadows and outlines aren't clipped. */
+  .hero-swipe {
+    display: flex; gap: 16px; margin: -6px -8px -8px; padding: 6px 8px 12px;
+    overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 8px;
+    overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .hero-swipe::-webkit-scrollbar { display: none; }
+  .hero-swipe > .hero-status { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; }
+  .hero-status.hero-left { display: grid; }
+  .hero .hero-status.hero-left { border-top-color: var(--accent); }
+  .hero-dots { display: flex; }
+  .hero-nav .button { min-height: 36px; padding: 4px 12px; font-size: 0.8rem; }
+
+  .hero-left .kpi-left { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 0; border: 0; }
+  .hero-left .kpi-part-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+  .hero-left .money-input input { min-height: 48px; font-size: 1.3rem; font-weight: 600; }
+  .hero-left .kpi-left-label { margin-top: 8px; }
+  .hero-left .kpi-left .kpi-value { grid-column: 1; grid-row: auto; font-size: 2.4rem; line-height: 1.05; letter-spacing: -0.03em; }
+  .hero-left .kpi-left .kpi-sub { grid-column: 1; font-size: 0.92rem; }
 }
+
 /* =====================================================================
    STYLE SWITCH (both looks) — the slider beside "Personal Budget"
    ===================================================================== */
@@ -756,6 +776,7 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 @media (max-width: 640px) {
   .topbar { position: relative; }
   .style-switch { position: absolute; top: -4px; right: 0; }
+  .topbar-actions { flex: 1 0 100%; } /* own row, so the buttons never slide under the switch */
   .style-switch-label { display: none; }
 }
 

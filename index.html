@@ -172,14 +172,28 @@
 
       <!-- ===================== SUMMARY: the answer first ===================== -->
       <section class="hero" id="hero" aria-live="polite">
-        <div class="hero-status">
-          <div class="hero-head">
-            <span id="statusPill" class="pill">Positive</span>
-            <span class="eyebrow">Projected remaining this month</span>
+        <!-- Phones: these two cards swipe sideways. Wider screens show only the first;
+             "Left from this check" sits in the Income tile instead (app.js moves it). -->
+        <div class="hero-top">
+          <div class="hero-swipe" id="heroSwipe">
+            <div class="hero-status">
+              <div class="hero-head">
+                <span id="statusPill" class="pill">Positive</span>
+                <span class="eyebrow">Projected remaining this month</span>
+              </div>
+              <p id="heroRemaining" class="hero-number">$0.00</p>
+              <p id="heroDelta" class="hero-delta" hidden></p>
+              <p id="heroMessage" class="hero-message"></p>
+            </div>
+            <div class="hero-status hero-left" id="heroLeft"></div>
           </div>
-          <p id="heroRemaining" class="hero-number">$0.00</p>
-          <p id="heroDelta" class="hero-delta" hidden></p>
-          <p id="heroMessage" class="hero-message"></p>
+          <div class="paycheck-nav hero-nav">
+            <button type="button" id="heroPrev" class="button button-outline button-small" aria-controls="heroSwipe" aria-label="Previous card" disabled>‹ Prev</button>
+            <div class="paycheck-dots hero-dots" id="heroDots" aria-hidden="true">
+              <span class="is-active"></span><span></span>
+            </div>
+            <button type="button" id="heroNext" class="button button-outline button-small" aria-controls="heroSwipe" aria-label="Next card">Next ›</button>
+          </div>
         </div>
 
         <dl class="kpis">
@@ -430,9 +444,9 @@
         <div id="weekList" class="paycheck-list"></div>
         <!-- Phones only: swipe the list sideways or use the buttons; the dots show which paycheck is on screen -->
         <div class="paycheck-nav">
-          <button type="button" id="weekPrev" class="button button-outline button-small" aria-controls="weekList">‹ Prev week</button>
+          <button type="button" id="weekPrev" class="button button-outline button-small" aria-controls="weekList" aria-label="Previous week">‹ Prev</button>
           <div id="weekDots" class="paycheck-dots" aria-hidden="true"></div>
-          <button type="button" id="weekNext" class="button button-outline button-small" aria-controls="weekList">Next week ›</button>
+          <button type="button" id="weekNext" class="button button-outline button-small" aria-controls="weekList" aria-label="Next week">Next ›</button>
         </div>
       </section>
 
