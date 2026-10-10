@@ -15,7 +15,9 @@
       } catch (error) {}
     </script>
     <!-- Home Screen icon and name (iPhone uses apple-touch-icon; others use the manifest) -->
-    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="media/dough-flow-mark.svg" type="image/svg+xml" />
+    <!-- For browsers that don't show SVG tab icons -->
+    <link rel="icon" href="media/dough-flow-mark-512.png" type="image/png" sizes="512x512" />
     <link rel="apple-touch-icon" href="icons/icon-180.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="apple-mobile-web-app-title" content="Dough Flow" />
@@ -61,6 +63,13 @@
 
     <div class="page">
       <header class="topbar">
+        <img
+          class="app-mark"
+          src="media/dough-flow-mark.svg"
+          alt=""
+          width="56"
+          height="56"
+        />
         <div class="title-block">
           <p class="eyebrow" id="monthLabel">This month</p>
           <div class="title-row">

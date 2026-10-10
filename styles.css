@@ -113,7 +113,7 @@ p { margin: 0; }
   max-width: 1240px;
   margin: 0 auto;
   padding-inline: 16px;
-  padding-block: 24px 48px;
+  padding-block: 44px 48px;
   display: grid;
   gap: 16px;
 }
@@ -140,6 +140,13 @@ p { margin: 0; }
   align-items: flex-end;
   gap: 16px;
   flex-wrap: wrap;
+}
+/* The app logo sits in the top-left corner, beside the name. */
+.app-mark { width: 56px; height: 56px; flex: none; align-self: center; }
+.title-block { margin-right: auto; } /* keeps the buttons on the far right */
+@media (max-width: 640px) {
+  .page { padding-block-start: 32px; }
+  .app-mark { width: 44px; height: 44px; }
 }
 
 .notice, .whatif-bar {
