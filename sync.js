@@ -99,7 +99,10 @@ function start() {
       return;
     }
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      // Always show Google's account list, so you can pick which account instead of reusing the last one.
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(auth, provider);
     } catch (error) {
       if (error.code !== "auth/popup-closed-by-user" && error.code !== "auth/cancelled-popup-request") {
         setStatus("Sign-in didn't work. Try again.");
