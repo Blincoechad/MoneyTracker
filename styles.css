@@ -101,6 +101,11 @@ body {
 
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 h1 { font-size: clamp(1.6rem, 1.2rem + 1.5vw, 2.2rem); font-weight: 800; letter-spacing: -0.02em; }
+/* The app name: "Dough" stays solid, "Flow" leans forward in the accent color and rides a wave. */
+.title-flow {
+  color: var(--accent); font-style: italic; padding-right: 0.06em;
+  text-decoration: underline wavy var(--accent); text-decoration-thickness: 0.07em; text-underline-offset: 0.16em;
+}
 h2 { font-size: 1.02rem; font-weight: 700; }
 p { margin: 0; }
 
@@ -870,6 +875,8 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
   text-decoration: underline; text-decoration-color: var(--sun); text-decoration-thickness: 0.32em;
   text-underline-offset: -0.12em; text-decoration-skip-ink: none;
 }
+/* Glass already draws a highlighter stripe under the whole name, so "Flow" drops its wave here. */
+:root[data-style="glass"] .title-flow { text-decoration: none; }
 :root[data-style="glass"] h2 { font-weight: 800; }
 :root[data-style="glass"] .eyebrow { color: var(--accent); font-weight: 800; }
 

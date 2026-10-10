@@ -1,6 +1,6 @@
 {
-  "name": "Personal Budget",
-  "short_name": "Budget",
+  "name": "Dough Flow",
+  "short_name": "Dough Flow",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

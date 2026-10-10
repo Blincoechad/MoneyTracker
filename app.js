@@ -1072,7 +1072,7 @@ function buildMonthReport(monthKey, state) {
   const pad = (text, width) => String(text).padEnd(width);
 
   const lines = [
-    `Personal Budget — ${monthName(monthKey)}`,
+    `Dough Flow — ${monthName(monthKey)}`,
     `Saved ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
     "",
     `Expected weekly take-home: ${money(r.expectedWeekly)}`,
