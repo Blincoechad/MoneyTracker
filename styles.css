@@ -448,6 +448,34 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 .footer-actions { display: grid; gap: 6px; justify-items: end; }
 .footer-buttons { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
+/* ---------- Credit (who built this) ----------
+   Three parts: "Built by" on the far left, logo + copyright in the exact
+   centre, contact box on the far right. The equal 1fr side columns are what
+   keep the middle centred whatever the sides contain. */
+.credit {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px;
+  padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.86rem;
+}
+.credit a { color: var(--accent); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.credit a:hover { text-decoration: underline; }
+.credit-built { justify-self: start; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.credit-built strong { color: var(--ink); font-weight: 800; }
+.credit-brand { display: flex; align-items: center; gap: 12px; }
+.credit-brand img { height: 44px; width: auto; flex: none; }
+.credit-contact {
+  justify-self: end; display: grid; gap: 4px; max-width: 340px;
+  padding: 12px 16px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.credit-contact-title { color: var(--ink); font-weight: 700; }
+
+/* Narrow screens: stack the three parts, centred. */
+@media (max-width: 860px) {
+  .credit { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .credit-built, .credit-contact { justify-self: center; }
+  .credit-contact { max-width: 100%; }
+}
+
 /* ---------- Sticky summary (appears when the hero scrolls away) ---------- */
 .sticky-summary {
   position: fixed; top: 0; left: 0; right: 0; z-index: 10;
@@ -851,6 +879,7 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 :root[data-style="glass"] .kpi,
 :root[data-style="glass"] .notice,
 :root[data-style="glass"] .whatif-bar,
+:root[data-style="glass"] .credit-contact,
 :root[data-style="glass"] .paycheck {
   background: var(--surface);
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
@@ -999,4 +1028,5 @@ input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-sof
 }
 
 /* Footer */
-:root[data-style="glass"] .footer { border-top: 2px dashed rgb(31 42 68 / 0.2); }
+:root[data-style="glass"] .footer,
+:root[data-style="glass"] .credit { border-top: 2px dashed rgb(31 42 68 / 0.2); }

@@ -27,7 +27,7 @@ mark_answered() {
   print -r -- "$payday" > "$ANSWERED_FILE"
 }
 
-message="How much did you make this week? (payday $(date -v-${days_since}d '+%a, %b %-d'))"
+message="How much was your check? (payday $(date -v-${days_since}d '+%a, %b %-d'))"
 
 while true; do
   # "Later" asks again the next time this runs. "Skip this week" stops asking until the next payday.
