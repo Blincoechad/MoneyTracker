@@ -32,6 +32,7 @@ const PUSH_DELAY_MS = 800; // wait for a pause in typing before sending
 const $ = (id) => document.getElementById(id);
 const syncArea = $("syncArea");
 const syncStatus = $("syncStatus");
+const syncEmail = $("syncEmail");
 const syncButton = $("syncButton");
 
 function setStatus(text) {
@@ -118,11 +119,15 @@ function start() {
       syncButton.textContent = "Sign in to sync";
       setStatus("Not syncing");
       syncArea.title = "";
+      syncEmail.hidden = true;
       return;
     }
 
     syncButton.textContent = "Sign out";
     syncArea.title = `Syncing as ${user.email}`;
+    // Shown on the page too: a phone has no hover, and each account has its own separate budget.
+    syncEmail.textContent = user.email;
+    syncEmail.hidden = false;
     setStatus("Connecting…");
     const ref = doc(db, "users", user.uid);
 
