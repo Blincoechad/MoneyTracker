@@ -1661,25 +1661,56 @@ archiveClosedMonth();
 renderInputs(); // also saves, so the cleared month is stored and can't be archived twice
 renderHistory();
 
-// The Friday reminder (tools/pay-reminder.sh) opens the page as index.html?pay=275.
-// Save that amount to the most recent payday week, then clean up the address.
+// The pay reminder (tools/pay-reminder.sh) opens the page as index.html?pay=275.
+// Save that amount to the most recent payday week.
+// Two rules keep this from stepping on what another device entered:
+//   - wait until sync has caught up, so an out-of-date copy here never overwrites the cloud
+//   - the first amount entered for a week stays; a later reminder doesn't replace it
+const PAY_LINK_WAIT_MS = 6000; // offline, or sync never answers: save anyway
+
 (function fillPayFromLink() {
   const params = new URLSearchParams(location.search);
   if (!params.has("pay")) return;
   history.replaceState(null, "", location.pathname); // a reload won't enter it twice
 
   const { value } = parseMoney(params.get("pay"));
-  const week = latestPaydayWeek(calculate(baseline).weeks);
-  if (value === null || !week) {
+  if (value === null) {
     monthNoticeText = "The pay from your reminder couldn't be saved. Enter it in the week below.";
     renderBanners();
     return;
   }
 
-  scenario = null;
-  baseline.actuals[week.key] = String(value);
-  baseline.isExample = false;
-  const label = weekLabel(week);
-  monthNoticeText = `Saved ${money(value)} to ${label.name} (${label.dates}).`;
-  renderInputs(); // also saves
+  monthNoticeText = `Saving ${money(value)} from your reminder…`;
+  renderBanners();
+
+  let done = false;
+  function save() {
+    if (done) return;
+    done = true;
+
+    const week = latestPaydayWeek(calculate(baseline).weeks);
+    if (!week) {
+      monthNoticeText = "The pay from your reminder couldn't be saved. Enter it in the week below.";
+      renderBanners();
+      return;
+    }
+    const label = weekLabel(week);
+    const existing = parseMoney(baseline.actuals[week.key]).value;
+    if (existing !== null) {
+      monthNoticeText = existing === value
+        ? `${label.name} (${label.dates}) already has ${money(existing)}.`
+        : `${label.name} (${label.dates}) already has ${money(existing)}, so ${money(value)} from this reminder wasn't saved. Change it in the week below if it's wrong.`;
+      renderBanners();
+      return;
+    }
+
+    scenario = null;
+    baseline.actuals[week.key] = String(value);
+    baseline.isExample = false;
+    monthNoticeText = `Saved ${money(value)} to ${label.name} (${label.dates}).`;
+    renderInputs(); // also saves
+  }
+
+  window.budgetApp.cloudReady = save; // sync.js calls this once this device matches the cloud, or isn't syncing
+  setTimeout(save, PAY_LINK_WAIT_MS);
 })();

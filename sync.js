@@ -44,6 +44,8 @@ const canSync = location.protocol.startsWith("http") && !firebaseConfig.apiKey.s
 
 if (canSync) {
   start();
+} else {
+  window.budgetApp.cloudReady?.(); // nothing to wait for
 }
 
 function start() {
@@ -123,6 +125,7 @@ function start() {
       setStatus("Not syncing");
       syncArea.title = "";
       syncEmail.hidden = true;
+      window.budgetApp.cloudReady?.(); // signed out: nothing to wait for
       return;
     }
 
@@ -194,10 +197,12 @@ function start() {
           }
         }
         setStatus(idleStatus());
+        window.budgetApp.cloudReady?.(); // this device now matches the cloud; a waiting reminder amount can save
       },
       (error) => {
         setStatus("Couldn't reach the cloud");
         console.error(error);
+        window.budgetApp.cloudReady?.();
       }
     );
   });

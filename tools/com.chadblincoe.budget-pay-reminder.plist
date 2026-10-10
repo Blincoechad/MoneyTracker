@@ -9,16 +9,17 @@
         <string>/bin/zsh</string>
         <string>/Users/chadblincoe/DesktopFolders/Programs/MyBudgetDash/tools/pay-reminder.sh</string>
     </array>
-    <!-- Every Friday (weekday 5) at 9:00 AM. If the Mac is asleep then, it runs on wake. -->
+    <!-- Every day at 9:00 AM (if the Mac is asleep then, it runs on wake) and at every login.
+         The script itself stays quiet unless the latest payday is still unanswered. -->
     <key>StartCalendarInterval</key>
     <dict>
-        <key>Weekday</key>
-        <integer>5</integer>
         <key>Hour</key>
         <integer>9</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
+    <key>RunAtLoad</key>
+    <true/>
     <key>StandardErrorPath</key>
     <string>/tmp/budget-pay-reminder.log</string>
 </dict>
