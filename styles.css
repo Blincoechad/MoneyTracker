@@ -612,10 +612,9 @@ input[aria-invalid="true"] {
 }
 .week-row {
   display: grid;
-  grid-template-columns: minmax(96px, 0.9fr) minmax(110px, 1fr) minmax(
-      0,
-      1.5fr
-    ) 84px;
+  grid-template-columns:
+    minmax(96px, 0.9fr) minmax(110px, 1fr) minmax(0, 1.5fr)
+    84px;
   gap: 12px;
   align-items: center;
   padding: 10px 0;
@@ -710,10 +709,9 @@ input[aria-invalid="true"] {
 .expense-header,
 .expense-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(
-      0,
-      1fr
-    ) minmax(0, 1fr) minmax(70px, 0.7fr) 36px;
+  grid-template-columns:
+    minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 1fr)
+    minmax(0, 1fr) minmax(70px, 0.7fr) 36px;
   gap: 8px;
   align-items: center;
 }
