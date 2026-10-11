@@ -539,7 +539,7 @@ input[aria-invalid="true"] {
   color: var(--accent);
 }
 .explain > div {
-  margin-top: 8px;
+  margin-top: 0;
   padding: 12px 14px;
   background: var(--surface-2);
   border-radius: 8px;
@@ -1095,8 +1095,15 @@ input[aria-invalid="true"] {
   align-items: center;
   gap: 12px;
 }
+@media (min-width: 861px) {
+  .credit-brand {
+    justify-self: center;
+    justify-content: center;
+    transform: translateX(-68px);
+  }
+}
 .credit-brand img {
-  height: 44px;
+  height: 176px;
   width: auto;
   flex: none;
 }
@@ -1122,6 +1129,22 @@ input[aria-invalid="true"] {
     grid-template-columns: 1fr;
     justify-items: center;
     text-align: center;
+  }
+  .credit-brand {
+    flex-direction: row;
+    gap: 12px;
+    order: 2;
+    margin-top: 0;
+  }
+  .credit-brand img {
+    height: 150px;
+  }
+  .credit-brand p {
+    flex: 1;
+    margin: 0;
+  }
+  .credit-contact {
+    order: 1;
   }
   .credit-built,
   .credit-contact {
