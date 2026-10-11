@@ -200,8 +200,25 @@ function markUpdated(part, time) {
 }
 
 // Called whenever this device saves a change.
+// A change the app made by itself (clearing last month's pay when a new month starts,
+// tidying an older save) isn't something you typed, so it only steps one past the copy
+// it started from. A real edit made on another device since then is newer and still wins.
+let savingAutomatically = false;
+
+function automatically(run) {
+  savingAutomatically = true;
+  try {
+    run();
+  } finally {
+    savingAutomatically = false;
+  }
+}
+
 function localChanged(part) {
-  markUpdated(part, Date.now());
+  markUpdated(
+    part,
+    savingAutomatically ? (readUpdated()[part] ?? 0) + 1 : Date.now(),
+  );
   window.budgetCloud?.push(part);
 }
 
@@ -271,9 +288,11 @@ window.budgetApp = {
     // (If the cloud copy was from last month, loadState just reset it; that IS a change, so it's left to save.)
     if (!closedMonth)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(baseline));
-    archiveClosedMonth();
-    if (scenario) refresh();
-    else renderInputs();
+    automatically(() => {
+      archiveClosedMonth();
+      if (scenario) refresh();
+      else renderInputs();
+    });
   },
 };
 
@@ -804,6 +823,8 @@ function dueText(item) {
     }
     case "every":
       return "Every payday";
+    case "weekly":
+      return "Every week";
     case "half":
       return "Half of an every-2-weeks bill";
     case "yearly":
@@ -1019,7 +1040,7 @@ function renderThisWeek(r, state) {
   const label = weekLabel(
     week,
     new Date().getMonth(),
-    baseline.payFrequency,
+    r.payFrequency,
   );
   $("thisWeekWhen").textContent =
     `${r.payFrequency === "biweekly" ? `Paycheck ${week.index + 1}` : label.name} of ${r.weeks.length} · ${label.dates}${latest ? "" : " (upcoming)"}`;
@@ -1536,8 +1557,10 @@ function checkForNewMonth() {
     scenario.actuals = {};
     scenario.actualsMonth = baseline.actualsMonth;
   }
-  archiveClosedMonth();
-  renderInputs();
+  automatically(() => {
+    archiveClosedMonth();
+    renderInputs();
+  });
   renderHistory();
   return true;
 }
@@ -1926,7 +1949,7 @@ window.addEventListener("storage", (event) => {
     const fresh = loadState();
     if (!fresh) return;
     baseline = fresh;
-    if (!scenario) renderInputs();
+    if (!scenario) automatically(renderInputs);
   } else if (event.key === HISTORY_KEY) {
     renderHistory();
   }
@@ -2105,8 +2128,10 @@ applyStyle(
 // Budget settings start folded once you're set up; open while setting up or using the example.
 $("settingsDetails").open =
   baseline.isExample || moneyOrZero(baseline.expectedWeekly) === 0;
-archiveClosedMonth();
-renderInputs(); // also saves, so the cleared month is stored and can't be archived twice
+automatically(() => {
+  archiveClosedMonth();
+  renderInputs(); // also saves, so the cleared month is stored and can't be archived twice
+});
 renderHistory();
 
 // The pay reminder (tools/pay-reminder.sh) opens the page as index.html?pay=275.

@@ -63,21 +63,37 @@ function toMonthly(amount, frequency, weeksInMonth) {
 
 // What one expense costs in this particular month. Same as toMonthly, except a
 // bill every 2 weeks with a due date counts its real payments this month (2 or 3);
-// without a date it counts half on each payday.
-function monthlyAmount(expense, year, monthIndex, weeksInMonth) {
+// without a date it counts half on each weekly payday, or the full amount on each
+// paycheck when you're paid every 2 weeks (biweeklyPaychecks = how many this month).
+function monthlyAmount(
+  expense,
+  year,
+  monthIndex,
+  weeksInMonth,
+  biweeklyPaychecks = null,
+) {
   const amount = moneyOrZero(expense.amount);
   if (expense.frequency === "biweekly") {
-    return parseIsoDate(expense.due)
-      ? amount * dueDaysInMonth(expense, year, monthIndex).length
-      : (amount * weeksInMonth) / 2;
+    if (parseIsoDate(expense.due))
+      return amount * dueDaysInMonth(expense, year, monthIndex).length;
+    return biweeklyPaychecks === null
+      ? (amount * weeksInMonth) / 2
+      : amount * biweeklyPaychecks;
   }
   return toMonthly(amount, expense.frequency, weeksInMonth);
 }
 
-function monthlyExpenseTotal(expenses, year, monthIndex, weeksInMonth) {
+function monthlyExpenseTotal(
+  expenses,
+  year,
+  monthIndex,
+  weeksInMonth,
+  biweeklyPaychecks = null,
+) {
   return expenses.reduce(
     (total, expense) =>
-      total + monthlyAmount(expense, year, monthIndex, weeksInMonth),
+      total +
+      monthlyAmount(expense, year, monthIndex, weeksInMonth, biweeklyPaychecks),
     0,
   );
 }
@@ -229,11 +245,15 @@ function calculateBudget(state, today) {
   );
   const year = today.getFullYear();
   const monthIndex = today.getMonth();
+  // Paid every 2 weeks: an undated every-2-weeks bill comes out of each paycheck.
+  const biweeklyPaychecks =
+    payFrequency === "biweekly" ? resolvedWeeks.length : null;
   const monthlyExpenses = monthlyExpenseTotal(
     state.expenses,
     year,
     monthIndex,
     weeksInMonth,
+    biweeklyPaychecks,
   );
   const monthlySavings = monthlySavingsTotal(state.savings, resolvedWeeks.length);
 
@@ -337,7 +357,13 @@ function calculateBudget(state, today) {
     expenseLines: state.expenses.map((expense) => ({
       id: expense.id,
       name: expense.name.trim() || "Unnamed expense",
-      monthly: monthlyAmount(expense, year, monthIndex, weeksInMonth),
+      monthly: monthlyAmount(
+        expense,
+        year,
+        monthIndex,
+        weeksInMonth,
+        biweeklyPaychecks,
+      ),
     })),
 
     paychecks,
@@ -420,7 +446,12 @@ function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
     };
 
     if (expense.frequency === "weekly") {
-      everyWeek({ ...base, amount, when: "every" });
+      // Paid every 2 weeks, a weekly bill shows once per week under each paycheck.
+      everyWeek({
+        ...base,
+        amount,
+        when: state.payFrequency === "biweekly" ? "weekly" : "every",
+      });
     } else if (expense.frequency === "yearly") {
       plans[0].push({ ...base, amount: amount / 12, when: "yearly" });
     } else if (expense.frequency === "biweekly" && !parseIsoDate(expense.due)) {
