@@ -20,10 +20,23 @@
 
 import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
-  initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, onSnapshot, setDoc,
-  terminate, clearIndexedDbPersistence, waitForPendingWrites,
+  getAuth,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  GoogleAuthProvider,
+} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  doc,
+  onSnapshot,
+  setDoc,
+  terminate,
+  clearIndexedDbPersistence,
+  waitForPendingWrites,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 const PARTS = ["budget", "history"];
@@ -40,7 +53,9 @@ function setStatus(text) {
 }
 
 // Sync needs a real web address (not a file opened from disk) and a configured project.
-const canSync = location.protocol.startsWith("http") && !firebaseConfig.apiKey.startsWith("PASTE");
+const canSync =
+  location.protocol.startsWith("http") &&
+  !firebaseConfig.apiKey.startsWith("PASTE");
 
 if (canSync) {
   start();
@@ -52,7 +67,11 @@ function start() {
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   // The local cache lets edits made offline wait and send themselves later.
-  const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
 
   let unsubscribe = null;
   let timers = {};
@@ -75,13 +94,21 @@ function start() {
       setStatus("Saving before sign-out…");
       flushPending();
       const saved = await Promise.race([
-        waitForPendingWrites(db).then(() => true, () => false),
-        new Promise((resolve) => setTimeout(() => resolve(false), navigator.onLine ? 8000 : 0)),
+        waitForPendingWrites(db).then(
+          () => true,
+          () => false,
+        ),
+        new Promise((resolve) =>
+          setTimeout(() => resolve(false), navigator.onLine ? 8000 : 0),
+        ),
       ]);
-      if (!saved && !window.confirm(
-        "Some of your latest changes haven't reached the cloud yet (you may be offline). " +
-        "Signing out now erases them from this device. Sign out anyway?"
-      )) {
+      if (
+        !saved &&
+        !window.confirm(
+          "Some of your latest changes haven't reached the cloud yet (you may be offline). " +
+            "Signing out now erases them from this device. Sign out anyway?",
+        )
+      ) {
         syncButton.disabled = false;
         setStatus(idleStatus());
         return;
@@ -106,7 +133,10 @@ function start() {
       provider.setCustomParameters({ prompt: "select_account" });
       await signInWithPopup(auth, provider);
     } catch (error) {
-      if (error.code !== "auth/popup-closed-by-user" && error.code !== "auth/cancelled-popup-request") {
+      if (
+        error.code !== "auth/popup-closed-by-user" &&
+        error.code !== "auth/cancelled-popup-request"
+      ) {
         setStatus("Sign-in didn't work. Try again.");
         console.error(error);
       }
@@ -145,7 +175,14 @@ function start() {
       waiting += 1;
       setStatus(idleStatus());
       try {
-        await setDoc(ref, { [part]: local[part], [`${part}UpdatedAt`]: local[`${part}UpdatedAt`] }, { merge: true });
+        await setDoc(
+          ref,
+          {
+            [part]: local[part],
+            [`${part}UpdatedAt`]: local[`${part}UpdatedAt`],
+          },
+          { merge: true },
+        );
       } catch (error) {
         setStatus("Couldn't save to the cloud");
         console.error(error);
@@ -171,14 +208,20 @@ function start() {
       (snapshot) => {
         // Only compare against what the server has. A cached copy may be out of date,
         // and our own unsent edits echo back here too.
-        if (snapshot.metadata.hasPendingWrites || snapshot.metadata.fromCache) return;
+        if (snapshot.metadata.hasPendingWrites || snapshot.metadata.fromCache)
+          return;
         const remote = snapshot.data() ?? {};
 
         // First sign-in after signing out on this device: the cloud copy wins outright,
         // so anything typed while signed out can't overwrite your real budget.
         if (window.budgetApp.isCloudFirst()) {
           for (const part of PARTS) {
-            if (remote[part] !== undefined) window.budgetApp.applyRemote(part, remote[part], remote[`${part}UpdatedAt`] ?? 0);
+            if (remote[part] !== undefined)
+              window.budgetApp.applyRemote(
+                part,
+                remote[part],
+                remote[`${part}UpdatedAt`] ?? 0,
+              );
           }
           window.budgetApp.clearCloudFirst();
         }
@@ -186,8 +229,14 @@ function start() {
         const local = window.budgetApp.getLocal();
 
         for (const part of PARTS) {
-          let remoteAt = remote[part] === undefined ? -1 : remote[`${part}UpdatedAt`] ?? 0;
-          if (part === "budget" && remote.budget && JSON.parse(remote.budget).isExample) remoteAt = 0;
+          let remoteAt =
+            remote[part] === undefined ? -1 : (remote[`${part}UpdatedAt`] ?? 0);
+          if (
+            part === "budget" &&
+            remote.budget &&
+            JSON.parse(remote.budget).isExample
+          )
+            remoteAt = 0;
           const localAt = local[`${part}UpdatedAt`];
 
           if (remoteAt > localAt) {
@@ -203,7 +252,7 @@ function start() {
         setStatus("Couldn't reach the cloud");
         console.error(error);
         window.budgetApp.cloudReady?.();
-      }
+      },
     );
   });
 

@@ -31,9 +31,11 @@ function parseMoney(rawText) {
   if (text === "") return { value: null, error: "" };
 
   const number = Number(text);
-  if (!Number.isFinite(number)) return { value: null, error: "Enter a number, like 450 or 450.50" };
+  if (!Number.isFinite(number))
+    return { value: null, error: "Enter a number, like 450 or 450.50" };
   if (number < 0) return { value: null, error: "Use a positive amount" };
-  if (number > 10_000_000) return { value: null, error: "That amount is too large" };
+  if (number > 10_000_000)
+    return { value: null, error: "That amount is too large" };
 
   // Round to cents so floating-point leftovers (0.1 + 0.2) never show up.
   return { value: Math.round(number * 100) / 100, error: "" };
@@ -73,25 +75,52 @@ function monthlyAmount(expense, year, monthIndex, weeksInMonth) {
 }
 
 function monthlyExpenseTotal(expenses, year, monthIndex, weeksInMonth) {
-  return expenses.reduce((total, expense) => total + monthlyAmount(expense, year, monthIndex, weeksInMonth), 0);
+  return expenses.reduce(
+    (total, expense) =>
+      total + monthlyAmount(expense, year, monthIndex, weeksInMonth),
+    0,
+  );
 }
 
-// Savings is only ever weekly or monthly, so it reuses the same converter.
-function monthlySavingsTotal(savings, weeksInMonth) {
-  return toMonthly(moneyOrZero(savings.amount), savings.frequency, weeksInMonth);
+// A "weekly" savings goal means a set amount from each paycheck in the UI.
+function monthlySavingsTotal(savings, paychecksInMonth) {
+  return savings.frequency === "weekly"
+    ? moneyOrZero(savings.amount) * paychecksInMonth
+    : moneyOrZero(savings.amount);
 }
 
 /* ---------------------------------------------------------------------
-   3. WHICH WEEKS BELONG TO THIS MONTH
-   One week per payday that falls in this calendar month. A month with
-   4 Fridays has 4 weeks; a month with 5 Fridays has 5 weeks.
+   3. WHICH PAYDAYS BELONG TO THIS MONTH
+   Weekly pay includes every matching weekday. Biweekly pay uses the
+   selected payday date as an anchor for the every-14-day schedule.
    --------------------------------------------------------------------- */
-function buildWeeks(year, monthIndex, paydayWeekday) {
+function buildWeeks(
+  year,
+  monthIndex,
+  paydayWeekday,
+  payFrequency = "weekly",
+  paydayAnchor = "",
+) {
   const lastDay = new Date(year, monthIndex + 1, 0).getDate();
   const weeks = [];
+  const anchor = parseIsoDate(paydayAnchor);
   for (let day = 1; day <= lastDay; day++) {
     const date = new Date(year, monthIndex, day);
-    if (date.getDay() === paydayWeekday) {
+    if (date.getDay() !== paydayWeekday) continue;
+    if (
+      payFrequency === "biweekly" &&
+      anchor &&
+      Math.abs(
+        Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) -
+          Date.UTC(anchor.getFullYear(), anchor.getMonth(), anchor.getDate()),
+      ) /
+        86_400_000 %
+        14 !==
+        0
+    ) {
+      continue;
+    }
+    if (payFrequency === "weekly" || (payFrequency === "biweekly" && anchor)) {
       weeks.push({ key: isoDate(date), startDay: day, endDay: day });
     }
   }
@@ -107,7 +136,9 @@ function findCurrentWeekIndex(weeks, todayDay) {
 // "2026-10-14" → a local Date, or null for anything else.
 function parseIsoDate(text) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(text ?? ""));
-  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
+  return match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : null;
 }
 
 function isoDate(date) {
@@ -118,13 +149,13 @@ function isoDate(date) {
 
 /* ---------------------------------------------------------------------
    4. ACTUAL OVERRIDES EXPECTED
-   For every week: if you typed an actual, use it. If not, use expected.
-   Each week also gets a status:
+   For every payday: if you typed an actual, use it. If not, use expected.
+   Each payday also gets a status:
      "actual"   — you entered what you made
      "assumed"  — the week is over but you left it blank, so we assume expected
      "open"     — still ahead of you; this is where recovery money can come from
    --------------------------------------------------------------------- */
-function resolveWeeks(weeks, actuals, expectedWeekly, currentWeekIndex) {
+function resolveWeeks(weeks, actuals, expectedPaycheck, currentWeekIndex) {
   return weeks.map((week, index) => {
     const actual = parseMoney(actuals[week.key]).value; // null when blank
     const hasActual = actual !== null;
@@ -134,14 +165,14 @@ function resolveWeeks(weeks, actuals, expectedWeekly, currentWeekIndex) {
     if (hasActual) status = "actual";
     else if (isPast) status = "assumed";
 
-    const amountUsed = hasActual ? actual : expectedWeekly;
+    const amountUsed = hasActual ? actual : expectedPaycheck;
     return {
       ...week,
       index,
-      expected: expectedWeekly,
+      expected: expectedPaycheck,
       actual,
       amountUsed,
-      difference: hasActual ? actual - expectedWeekly : 0,
+      difference: hasActual ? actual - expectedPaycheck : 0,
       status,
     };
   });
@@ -153,72 +184,129 @@ function resolveWeeks(weeks, actuals, expectedWeekly, currentWeekIndex) {
    dashboard shows. The UI never does math on its own; it only reads this.
 
    Four separate ideas, never mixed:
-     BASELINE   — expected weekly income, the plan
-     ACTUAL     — what you really made in a given week
-     PROJECTION — where the month ends if open weeks pay as expected
-     RECOVERY   — what the open weeks must pay so the month doesn't go negative
+     BASELINE   — expected paycheck income, the plan
+     ACTUAL     — what you really made on a payday
+     PROJECTION — where the month ends if open paydays pay as expected
+     RECOVERY   — what the open paydays must pay so the month doesn't go negative
    --------------------------------------------------------------------- */
 function calculateBudget(state, today) {
-  const expectedWeekly = moneyOrZero(state.expectedWeekly);
+  const expectedPaycheck = moneyOrZero(state.expectedWeekly);
+  const payFrequency = state.payFrequency ?? "weekly";
+  const expectedWeekly =
+    payFrequency === "biweekly" ? expectedPaycheck / 2 : expectedPaycheck;
 
   // --- Month structure ---
-  const weeks = buildWeeks(today.getFullYear(), today.getMonth(), Number(state.paydayWeekday));
+  const weeks = buildWeeks(
+    today.getFullYear(),
+    today.getMonth(),
+    Number(state.paydayWeekday),
+    payFrequency,
+    state.paydayAnchor,
+  );
+  const calendarWeeks = buildWeeks(
+    today.getFullYear(),
+    today.getMonth(),
+    Number(state.paydayWeekday),
+  );
   const autoWeekIndex = findCurrentWeekIndex(weeks, today.getDate());
-  const currentWeekIndex = state.currentWeek === "auto" ? autoWeekIndex : Math.min(Number(state.currentWeek), weeks.length);
-  const weeksInMonth = weeks.length; // 4 or 5
+  const currentWeekIndex = autoWeekIndex;
+  const weeksInMonth = calendarWeeks.length; // 4 or 5 weekly periods
 
-  const resolvedWeeks = resolveWeeks(weeks, state.actuals, expectedWeekly, currentWeekIndex);
+  const resolvedWeeks = resolveWeeks(
+    weeks,
+    state.actuals,
+    expectedPaycheck,
+    currentWeekIndex,
+  );
 
   // --- Baseline (the plan, ignoring actuals) ---
-  const baselineMonthlyIncome = expectedWeekly * weeksInMonth;
+  const baselineMonthlyIncome = expectedPaycheck * resolvedWeeks.length;
 
   // --- Projection (actuals where entered, expected everywhere else) ---
-  const projectedIncome = resolvedWeeks.reduce((sum, week) => sum + week.amountUsed, 0);
+  const projectedIncome = resolvedWeeks.reduce(
+    (sum, week) => sum + week.amountUsed,
+    0,
+  );
   const year = today.getFullYear();
   const monthIndex = today.getMonth();
-  const monthlyExpenses = monthlyExpenseTotal(state.expenses, year, monthIndex, weeksInMonth);
-  const monthlySavings = monthlySavingsTotal(state.savings, weeksInMonth);
+  const monthlyExpenses = monthlyExpenseTotal(
+    state.expenses,
+    year,
+    monthIndex,
+    weeksInMonth,
+  );
+  const monthlySavings = monthlySavingsTotal(state.savings, resolvedWeeks.length);
 
   // Bills you chose to pay from another source (like side savings) don't come out of your pay.
-  const paychecks = planPaychecks(state, resolvedWeeks, year, monthIndex);
-  const paidFromOther = paychecks.reduce((sum, plan) => sum + plan.fromOther, 0);
+  const paychecks = planPaychecks(
+    state,
+    resolvedWeeks,
+    year,
+    monthIndex,
+    calendarWeeks,
+  );
+  const paidFromOther = paychecks.reduce(
+    (sum, plan) => sum + plan.fromOther,
+    0,
+  );
   // Savings actually added: each paycheck's Savings line you've checked off.
   const paid = state.paid ?? {};
   const savedThisMonth = paychecks.reduce(
-    (sum, plan) => sum + plan.items.filter((item) => item.isSavings && paid[`${plan.key}|${item.id}`]).reduce((s, item) => s + item.amount, 0),
-    0
+    (sum, plan) =>
+      sum +
+      plan.items
+        .filter((item) => item.isSavings && paid[`${plan.key}|${item.id}`])
+        .reduce((s, item) => s + item.amount, 0),
+    0,
   );
-  const projectedRemaining = projectedIncome - monthlyExpenses - monthlySavings + paidFromOther;
+  const projectedRemaining =
+    projectedIncome - monthlyExpenses - monthlySavings + paidFromOther;
 
-  // --- Minimum weekly income (break-even if every week paid the same) ---
-  const requiredMonthlyIncome = monthlyExpenses + monthlySavings - paidFromOther;
-  const minimumWeeklyIncome = weeksInMonth > 0 ? requiredMonthlyIncome / weeksInMonth : 0;
-  const weeklyBuffer = expectedWeekly - minimumWeeklyIncome;
+  // --- Minimum income and buffer averaged across this month's pay periods ---
+  const requiredMonthlyIncome =
+    monthlyExpenses + monthlySavings - paidFromOther;
+  const minimumIncomePerPayPeriod =
+    resolvedWeeks.length > 0
+      ? requiredMonthlyIncome / resolvedWeeks.length
+      : 0;
+  const payPeriodBuffer = expectedPaycheck - minimumIncomePerPayPeriod;
 
-  // --- Recovery (split only across weeks that haven't happened yet) ---
+  // --- Recovery (split only across paydays that haven't happened yet) ---
   const openWeeks = resolvedWeeks.filter((week) => week.status === "open");
   const closedWeeks = resolvedWeeks.filter((week) => week.status !== "open");
   const openWeekCount = openWeeks.length;
 
-  const incomeReceived = closedWeeks.reduce((sum, week) => sum + week.amountUsed, 0);
-  const expectedStillToCome = openWeekCount * expectedWeekly;
+  const incomeReceived = closedWeeks.reduce(
+    (sum, week) => sum + week.amountUsed,
+    0,
+  );
+  const expectedStillToCome = openWeeks.reduce(
+    (sum, week) => sum + week.expected,
+    0,
+  );
 
-  // How far actual weeks are from the plan. Positive = behind, negative = ahead.
+  // How far actual paychecks are from the plan. Positive = behind, negative = ahead.
   const shortfallVsPlan = resolvedWeeks
     .filter((week) => week.status === "actual")
     .reduce((sum, week) => sum + (week.expected - week.actual), 0);
 
-  // What the open weeks must produce so the month ends at exactly $0.
+  // What the open paychecks must produce so the month ends at exactly $0.
   const stillRequired = Math.max(0, requiredMonthlyIncome - incomeReceived);
 
   const hasOpenWeeks = openWeekCount > 0;
-  const breakEvenPerOpenWeek = hasOpenWeeks ? stillRequired / openWeekCount : null;
-  const onPlanPerOpenWeek = hasOpenWeeks ? expectedWeekly + shortfallVsPlan / openWeekCount : null;
+  const breakEvenPerOpenWeek = hasOpenWeeks
+    ? stillRequired / openWeekCount
+    : null;
+  const onPlanPerOpenWeek = hasOpenWeeks
+    ? expectedPaycheck + shortfallVsPlan / openWeekCount
+    : null;
   const deficit = Math.max(0, -projectedRemaining);
   const extraPerOpenWeek = hasOpenWeeks ? deficit / openWeekCount : null;
 
   return {
     expectedWeekly,
+    expectedPaycheck,
+    payFrequency,
     weeks: resolvedWeeks,
     weeksInMonth,
     currentWeekIndex,
@@ -232,8 +320,8 @@ function calculateBudget(state, today) {
     isPositive: projectedRemaining >= 0,
 
     requiredMonthlyIncome,
-    minimumWeeklyIncome,
-    weeklyBuffer,
+    minimumIncomePerPayPeriod,
+    payPeriodBuffer,
 
     openWeekCount,
     completedWeekCount: closedWeeks.length,
@@ -253,6 +341,7 @@ function calculateBudget(state, today) {
     })),
 
     paychecks,
+    calendarWeeks,
     paidFromOther,
     savedThisMonth,
   };
@@ -262,11 +351,11 @@ function calculateBudget(state, today) {
    6. WHICH PAYCHECK PAYS WHICH BILL
    Each bill is paid from the most recent paycheck on or before the day
    it's due. Bills without a date land where they're simplest:
-     weekly                → every paycheck
+     weekly                → every calendar week, grouped under its paycheck
      monthly, no due day   → the first paycheck
      every 2 weeks, no date→ half on every paycheck
      yearly                → 1/12 set aside from the first paycheck
-     savings               → every paycheck (weekly) or the first (monthly)
+     savings               → every calendar week (weekly) or the first (monthly)
    A bill due before this month's first payday is still listed on the
    first paycheck, flagged so you know it's already due.
    A bill you mark "pay from other source" for a paycheck stays listed
@@ -287,7 +376,9 @@ function dueDaysInMonth(expense, year, monthIndex) {
     if (!anchor) return [];
     const days = [];
     for (let day = 1; day <= lastDay; day++) {
-      const daysApart = Math.round((new Date(year, monthIndex, day) - anchor) / 86_400_000);
+      const daysApart = Math.round(
+        (new Date(year, monthIndex, day) - anchor) / 86_400_000,
+      );
       if (((daysApart % 14) + 14) % 14 === 0) days.push(day);
     }
     return days;
@@ -295,52 +386,107 @@ function dueDaysInMonth(expense, year, monthIndex) {
   return [];
 }
 
-function planPaychecks(state, weeks, year, monthIndex) {
+function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
   const plans = weeks.map(() => []);
   if (weeks.length === 0) return [];
-  const everyPaycheck = (item) => plans.forEach((items) => items.push({ ...item }));
+  const periods =
+    calendarWeeks ??
+    buildWeeks(year, monthIndex, Number(state.paydayWeekday));
+  const paycheckForPeriod = (period) => {
+    const index = weeks.reduce(
+      (found, week, i) => (week.startDay <= period.startDay ? i : found),
+      -1,
+    );
+    return Math.max(index, 0);
+  };
+  const everyPaycheck = (item) =>
+    plans.forEach((items) => items.push({ ...item }));
+  const everyWeek = (item) =>
+    periods.forEach((period) => {
+      plans[paycheckForPeriod(period)].push({
+        ...item,
+        id:
+          weeks[paycheckForPeriod(period)].key === period.key
+            ? item.id
+            : `${item.id}|${period.key}`,
+      });
+    });
 
   for (const expense of state.expenses) {
     const amount = moneyOrZero(expense.amount);
-    const base = { id: expense.id, name: expense.name.trim() || "Unnamed expense" };
+    const base = {
+      id: expense.id,
+      name: expense.name.trim() || "Unnamed expense",
+    };
 
     if (expense.frequency === "weekly") {
-      everyPaycheck({ ...base, amount, when: "every" });
+      everyWeek({ ...base, amount, when: "every" });
     } else if (expense.frequency === "yearly") {
       plans[0].push({ ...base, amount: amount / 12, when: "yearly" });
     } else if (expense.frequency === "biweekly" && !parseIsoDate(expense.due)) {
-      everyPaycheck({ ...base, amount: amount / 2, when: "half" });
+      if (state.payFrequency === "biweekly")
+        everyPaycheck({ ...base, amount, when: "every" });
+      else everyPaycheck({ ...base, amount: amount / 2, when: "half" });
     } else {
       const days = dueDaysInMonth(expense, year, monthIndex);
       if (expense.frequency === "monthly" && days.length === 0) {
         plans[0].push({ ...base, amount, when: "unset" });
       }
       for (const day of days) {
-        const index = weeks.reduce((found, week, i) => (week.startDay <= day ? i : found), -1);
-        plans[Math.max(index, 0)].push({ ...base, amount, when: "due", dueDay: day, beforePayday: index === -1 });
+        const index = weeks.reduce(
+          (found, week, i) => (week.startDay <= day ? i : found),
+          -1,
+        );
+        plans[Math.max(index, 0)].push({
+          ...base,
+          amount,
+          when: "due",
+          dueDay: day,
+          beforePayday: index === -1,
+        });
       }
     }
   }
 
   const savings = moneyOrZero(state.savings.amount);
   if (savings > 0) {
-    const item = { id: "savings", name: "Savings", amount: savings, isSavings: true };
-    if (state.savings.frequency === "weekly") everyPaycheck({ ...item, when: "every" });
+    const item = {
+      id: "savings",
+      name: "Savings",
+      amount: savings,
+      isSavings: true,
+    };
+    if (state.savings.frequency === "weekly")
+      everyPaycheck({ ...item, when: "every" });
     else plans[0].push({ ...item, when: "monthly" });
   }
 
   // Dated bills first (by due day), then every-paycheck ones, savings last.
-  const order = (item) => (item.isSavings ? 100 : item.when === "due" ? item.dueDay : item.when === "unset" ? 0 : 50);
+  const order = (item) =>
+    item.isSavings
+      ? 100
+      : item.when === "due"
+        ? item.dueDay
+        : item.when === "unset"
+          ? 0
+          : 50;
   const otherSource = state.otherSource ?? {};
   let running = 0;
   return plans.map((items, i) => {
     items.sort((a, b) => order(a) - order(b));
     const key = weeks[i].key;
     items.forEach((item) => {
-      item.fromOther = !item.isSavings && Boolean(otherSource[`${key}|${item.id}`]);
+      item.fromOther =
+        !item.isSavings && Boolean(otherSource[`${key}|${item.id}`]);
     });
-    const out = items.reduce((sum, item) => sum + (item.fromOther ? 0 : item.amount), 0);
-    const fromOther = items.reduce((sum, item) => sum + (item.fromOther ? item.amount : 0), 0);
+    const out = items.reduce(
+      (sum, item) => sum + (item.fromOther ? 0 : item.amount),
+      0,
+    );
+    const fromOther = items.reduce(
+      (sum, item) => sum + (item.fromOther ? item.amount : 0),
+      0,
+    );
     const left = weeks[i].amountUsed - out;
     running += left;
     return { key, items, out, fromOther, left, running };
@@ -358,12 +504,18 @@ function planPaychecks(state, weeks, year, monthIndex) {
    it's the paycheck minus the bills already checked off.
    --------------------------------------------------------------------- */
 function spendingRoom(weeks, paychecks, weekIndex, paid, haveText) {
-  const unpaid = (plan) => plan.items.reduce(
-    (sum, item) => sum + (item.fromOther || paid[`${plan.key}|${item.id}`] ? 0 : item.amount), 0);
+  const unpaid = (plan) =>
+    plan.items.reduce(
+      (sum, item) =>
+        sum +
+        (item.fromOther || paid[`${plan.key}|${item.id}`] ? 0 : item.amount),
+      0,
+    );
 
   const dueNow = unpaid(paychecks[weekIndex]);
   const paidNow = paychecks[weekIndex].out - dueNow;
-  const have = parseMoney(haveText).value ?? weeks[weekIndex].amountUsed - paidNow;
+  const have =
+    parseMoney(haveText).value ?? weeks[weekIndex].amountUsed - paidNow;
 
   let running = 0;
   let lowest = 0;
@@ -379,10 +531,27 @@ function spendingRoom(weeks, paychecks, weekIndex, paid, haveText) {
   const round = (n) => Math.round(n * 100) / 100;
   const keepLater = round(0 - lowest);
   const keep = round(dueNow + keepLater);
-  return { have: round(have), dueNow: round(dueNow), keepLater, shortIndex, keep, canSpend: round(have - keep) };
+  return {
+    have: round(have),
+    dueNow: round(dueNow),
+    keepLater,
+    shortIndex,
+    keep,
+    canSpend: round(have - keep),
+  };
 }
 
 // Lets Node load this file for testing; browsers simply skip this line.
 if (typeof module !== "undefined") {
-  module.exports = { parseMoney, toMonthly, monthlyAmount, buildWeeks, resolveWeeks, calculateBudget, planPaychecks, dueDaysInMonth, spendingRoom };
+  module.exports = {
+    parseMoney,
+    toMonthly,
+    monthlyAmount,
+    buildWeeks,
+    resolveWeeks,
+    calculateBudget,
+    planPaychecks,
+    dueDaysInMonth,
+    spendingRoom,
+  };
 }

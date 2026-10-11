@@ -56,7 +56,7 @@
         <strong id="stickyRemaining">$0.00</strong>
       </span>
       <span class="sticky-figure">
-        <span class="sticky-label">Break even / wk</span>
+        <span class="sticky-label" id="stickyMinimumLabel">Break even / wk</span>
         <strong id="stickyMinimum">$0.00</strong>
       </span>
     </div>
@@ -398,7 +398,7 @@
         </dl>
       </section>
 
-      <!-- ===================== THIS WEEK: the one thing to do each Friday ===================== -->
+      <!-- ===================== CURRENT PAY: the latest paycheck entry ===================== -->
       <section
         class="panel this-week"
         id="thisWeek"
@@ -449,7 +449,7 @@
             id="weekPrev"
             class="button button-outline button-small"
             aria-controls="weekList"
-            aria-label="Previous week"
+            aria-label="Previous paycheck"
           >
             ‹ Prev
           </button>
@@ -459,7 +459,7 @@
             id="weekNext"
             class="button button-outline button-small"
             aria-controls="weekList"
-            aria-label="Next week"
+            aria-label="Next paycheck"
           >
             Next ›
           </button>
@@ -481,7 +481,7 @@
                 <dd id="needOnPlan">$0.00</dd>
               </div>
               <div>
-                <dt>Your usual week</dt>
+                <dt id="needUsualLabel">Your usual week</dt>
                 <dd id="needUsual">$0.00</dd>
               </div>
             </dl>
@@ -520,7 +520,15 @@
                   <h3 id="incomeHeading">Income</h3>
 
                   <div class="field">
-                    <label for="expectedWeekly">
+                    <label for="payFrequency">Pay frequency</label>
+                    <select id="payFrequency">
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Every 2 weeks</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label for="expectedWeekly" id="payAmountLabel">
                       Expected weekly take-home
                     </label>
                     <div class="money-input">
@@ -539,14 +547,14 @@
                       id="expectedWeeklyError"
                       role="alert"
                     ></p>
-                    <p class="hint">
+                    <p class="hint" id="payAmountHint">
                       Your normal week. Every week you haven't filled in below
                       uses this amount.
                     </p>
                   </div>
 
                   <div class="field-row">
-                    <div class="field">
+                    <div class="field" id="paydayWeekdayField">
                       <label for="paydayWeekday">Payday</label>
                       <select id="paydayWeekday">
                         <option value="0">Sunday</option>
@@ -558,9 +566,9 @@
                         <option value="6">Saturday</option>
                       </select>
                     </div>
-                    <div class="field">
-                      <label for="currentWeek">Current week</label>
-                      <select id="currentWeek"></select>
+                    <div class="field" id="paydayAnchorField" hidden>
+                      <label for="paydayAnchor">A payday date</label>
+                      <input id="paydayAnchor" type="date" />
                     </div>
                   </div>
                   <p class="hint" id="weekCountHint"></p>
@@ -715,7 +723,7 @@
                   <tr>
                     <th scope="col">Monthly breakdown</th>
                     <th scope="col">This month</th>
-                    <th scope="col">Per week</th>
+                    <th scope="col" id="breakdownPeriodHeading">Per week</th>
                   </tr>
                 </thead>
                 <tbody id="breakdownBody"></tbody>
@@ -731,7 +739,7 @@
           <section class="panel" aria-labelledby="historyHeading">
             <h2 id="historyHeading">Monthly history</h2>
             <p class="hint">
-              When a month ends, its weeks and pay are saved here. Use ⋯ to
+              When a month ends, its pay periods and pay are saved here. Use ⋯ to
               download a month's .txt report or delete it.
             </p>
             <ul id="historyList" class="history-list"></ul>
@@ -752,22 +760,21 @@
               except to the cent.
             </li>
             <li>
-              Projection = actual weeks where you entered them, expected income
-              for every other week.
+              Projection = actual pay where you entered it, expected income for
+              every blank pay period.
             </li>
             <li>
-              "What you need each week" only counts the weeks still ahead of
-              you. Past weeks left blank are assumed to have paid your usual
-              amount.
+              "What you need" only counts pay periods still ahead of you. Past
+              periods left blank are assumed to have paid your usual amount.
             </li>
             <li>
               Savings is taken out of what's left, but it is not counted as an
               expense.
             </li>
             <li>
-              Your budget is saved in this browser only. Weekly actuals clear
-              when a new month starts, after the finished month is saved to
-              Monthly history.
+              Your budget is saved in this browser only. Pay-period actuals
+              clear when a new month starts, after the finished month is saved
+              to Monthly history.
             </li>
           </ul>
         </div>

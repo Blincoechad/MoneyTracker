@@ -15,10 +15,36 @@
    ===================================================================== */
 
 const STORAGE_KEY = "personal-budget-dashboard-v1";
-const MONTH_NAMES_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_NAMES_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const WEEKDAY_PLURAL = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
-const FREQUENCY_LABELS = { weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly", yearly: "Yearly" };
+const WEEKDAY_PLURAL = [
+  "Sundays",
+  "Mondays",
+  "Tuesdays",
+  "Wednesdays",
+  "Thursdays",
+  "Fridays",
+  "Saturdays",
+];
+const FREQUENCY_LABELS = {
+  weekly: "Weekly",
+  biweekly: "Every 2 weeks",
+  monthly: "Monthly",
+  yearly: "Yearly",
+};
 
 /* =====================================================================
    1. STATE — the single source of truth
@@ -35,14 +61,21 @@ function newId() {
   return `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
+function defaultPaydayAnchor(weekday = 5) {
+  const date = new Date();
+  date.setDate(date.getDate() + ((weekday - date.getDay() + 7) % 7));
+  return isoDate(date);
+}
+
 function createExampleState() {
   const today = new Date();
   const firstPayday = buildWeeks(today.getFullYear(), today.getMonth(), 5)[0];
   return {
     isExample: true,
     expectedWeekly: "500",
+    payFrequency: "weekly",
     paydayWeekday: 5,
-    currentWeek: "auto",
+    paydayAnchor: firstPayday.key,
     actualsMonth: currentMonthKey(),
     actuals: { [firstPayday.key]: "425" },
     paid: {},
@@ -52,11 +85,29 @@ function createExampleState() {
     savedBefore: "",
     savingsAdjust: 0,
     expenses: [
-      { id: newId(), name: "Rent", amount: "700", frequency: "monthly", due: "1" },
-      { id: newId(), name: "Internet", amount: "20", frequency: "monthly", due: "20" },
+      {
+        id: newId(),
+        name: "Rent",
+        amount: "700",
+        frequency: "monthly",
+        due: "1",
+      },
+      {
+        id: newId(),
+        name: "Internet",
+        amount: "20",
+        frequency: "monthly",
+        due: "20",
+      },
       { id: newId(), name: "Gas", amount: "40", frequency: "weekly", due: "" },
       { id: newId(), name: "Food", amount: "30", frequency: "weekly", due: "" },
-      { id: newId(), name: "Insurance", amount: "55", frequency: "monthly", due: "10" },
+      {
+        id: newId(),
+        name: "Insurance",
+        amount: "55",
+        frequency: "monthly",
+        due: "10",
+      },
     ],
     savings: { amount: "100", frequency: "weekly" },
   };
@@ -66,8 +117,9 @@ function createBlankState() {
   return {
     isExample: false,
     expectedWeekly: "",
+    payFrequency: "weekly",
     paydayWeekday: 5,
-    currentWeek: "auto",
+    paydayAnchor: defaultPaydayAnchor(5),
     actualsMonth: currentMonthKey(),
     actuals: {},
     paid: {}, // "<payday>|<bill id>": true once you've marked it paid
@@ -138,7 +190,10 @@ function readUpdated() {
 
 function markUpdated(part, time) {
   try {
-    localStorage.setItem(UPDATED_KEY, JSON.stringify({ ...readUpdated(), [part]: time }));
+    localStorage.setItem(
+      UPDATED_KEY,
+      JSON.stringify({ ...readUpdated(), [part]: time }),
+    );
   } catch (error) {
     /* storage unavailable */
   }
@@ -160,7 +215,10 @@ window.budgetApp = {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(baseline));
       localStorage.setItem(HISTORY_KEY, "[]");
-      localStorage.setItem(UPDATED_KEY, JSON.stringify({ budget: 0, history: 0 }));
+      localStorage.setItem(
+        UPDATED_KEY,
+        JSON.stringify({ budget: 0, history: 0 }),
+      );
       localStorage.setItem(CLOUD_FIRST_KEY, "1");
     } catch (error) {
       /* storage unavailable */
@@ -189,7 +247,7 @@ window.budgetApp = {
     const updated = readUpdated();
     return {
       budget: JSON.stringify(baseline),
-      budgetUpdatedAt: baseline.isExample ? 0 : updated.budget ?? 0,
+      budgetUpdatedAt: baseline.isExample ? 0 : (updated.budget ?? 0),
       history: JSON.stringify(loadHistory()),
       historyUpdatedAt: updated.history ?? 0,
     };
@@ -211,7 +269,8 @@ window.budgetApp = {
     baseline = loadState() ?? baseline;
     // Store the cleaned-up copy so the next save sees no change and doesn't send it back.
     // (If the cloud copy was from last month, loadState just reset it; that IS a change, so it's left to save.)
-    if (!closedMonth) localStorage.setItem(STORAGE_KEY, JSON.stringify(baseline));
+    if (!closedMonth)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(baseline));
     archiveClosedMonth();
     if (scenario) refresh();
     else renderInputs();
@@ -229,14 +288,25 @@ function loadState() {
 
   // Merge onto a blank budget so a missing field never becomes undefined.
   const state = { ...createBlankState(), ...saved };
+  state.payFrequency =
+    saved.payFrequency === "biweekly" ? "biweekly" : "weekly";
+  state.paydayAnchor =
+    typeof saved.paydayAnchor === "string" && parseIsoDate(saved.paydayAnchor)
+      ? saved.paydayAnchor
+      : defaultPaydayAnchor(Number(state.paydayWeekday));
   state.savings = { ...createBlankState().savings, ...(saved.savings || {}) };
   state.expenses = Array.isArray(saved.expenses) ? saved.expenses : [];
-  state.actuals = saved.actuals && typeof saved.actuals === "object" ? saved.actuals : {};
+  state.actuals =
+    saved.actuals && typeof saved.actuals === "object" ? saved.actuals : {};
   state.paid = saved.paid && typeof saved.paid === "object" ? saved.paid : {};
-  state.otherSource = saved.otherSource && typeof saved.otherSource === "object" ? saved.otherSource : {};
+  state.otherSource =
+    saved.otherSource && typeof saved.otherSource === "object"
+      ? saved.otherSource
+      : {};
   // Older saves kept one amount per payday; carry the most recent one over.
   if (saved.leftNow && typeof saved.leftNow === "object") {
-    state.leftNow = saved.leftNow[Object.keys(saved.leftNow).sort().pop()] ?? "";
+    state.leftNow =
+      saved.leftNow[Object.keys(saved.leftNow).sort().pop()] ?? "";
   } else {
     state.leftNow = typeof saved.leftNow === "string" ? saved.leftNow : "";
   }
@@ -253,13 +323,13 @@ function closeMonthIfNeeded(state) {
   settleMonth(state);
   if (!state.isExample) {
     closedMonth = { key: state.actualsMonth, state: structuredClone(state) };
-    monthNoticeText = "A new month started. Last month's weekly pay was saved to Monthly history and cleared. Your income, bills, and savings are unchanged.";
+    monthNoticeText =
+      "A new month started. Last month's pay periods were saved to Monthly history and cleared. Your income, bills, and savings are unchanged.";
   }
   state.actuals = {};
   state.paid = {};
   state.otherSource = {};
   state.actualsMonth = currentMonthKey();
-  state.currentWeek = "auto";
   return true;
 }
 
@@ -268,12 +338,17 @@ function closeMonthIfNeeded(state) {
 // checked off are added to your all-time total.
 function settleMonth(state) {
   const [year, month] = state.actualsMonth.split("-").map(Number);
-  const { paidFromOther, savedThisMonth } = calculateBudget({ ...state, currentWeek: 99 }, new Date(year, month, 0));
+  const { paidFromOther, savedThisMonth } = calculateBudget(
+    state,
+    new Date(year, month, 0),
+  );
   const round = (n) => String(Math.round(n * 100) / 100);
   const balance = parseMoney(state.outsideBalance).value;
-  if (balance !== null && paidFromOther > 0) state.outsideBalance = round(balance - paidFromOther);
+  if (balance !== null && paidFromOther > 0)
+    state.outsideBalance = round(balance - paidFromOther);
   const addedThisMonth = savedThisMonth + amountOrZero(state.savingsAdjust);
-  if (addedThisMonth !== 0) state.savedBefore = round(amountOrZero(state.savedBefore) + addedThisMonth);
+  if (addedThisMonth !== 0)
+    state.savedBefore = round(amountOrZero(state.savedBefore) + addedThisMonth);
   state.savingsAdjust = 0;
 }
 
@@ -287,16 +362,22 @@ function amountOrZero(value) {
 // Move each of those amounts onto the matching payday week of that month.
 function migrateAverageWeeks(state) {
   if ("weekMode" in state) {
-    if (state.weekMode === "average") state.currentWeek = "auto";
     delete state.weekMode;
   }
   const [year, month] = state.actualsMonth.split("-").map(Number);
-  const weeks = buildWeeks(year, month - 1, Number(state.paydayWeekday));
+  const weeks = buildWeeks(
+    year,
+    month - 1,
+    Number(state.paydayWeekday),
+    state.payFrequency ?? "weekly",
+    state.paydayAnchor,
+  );
   for (const key of Object.keys(state.actuals)) {
     const match = /^avg-(\d)$/.exec(key);
     if (!match) continue;
     const week = weeks[Number(match[1]) - 1];
-    if (week && !(week.key in state.actuals)) state.actuals[week.key] = state.actuals[key];
+    if (week && !(week.key in state.actuals))
+      state.actuals[week.key] = state.actuals[key];
     delete state.actuals[key];
   }
 }
@@ -307,7 +388,10 @@ function migrateAverageWeeks(state) {
    dollar amount on the page looks the same.
    ===================================================================== */
 
-const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const currency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
 
 // Treat tiny floating-point leftovers (like -0.0000001) as zero.
 function clean(number) {
@@ -332,16 +416,54 @@ function formatWeeks(count) {
 
 // Any text the user typed must be escaped before going into innerHTML.
 function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+  return String(text).replace(
+    /[&<>"']/g,
+    (char) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        char
+      ],
+  );
 }
 
-function weekLabel(week, monthIndex = new Date().getMonth()) {
+function weekLabel(
+  week,
+  monthIndex = new Date().getMonth(),
+  payFrequency = "weekly",
+) {
   const month = MONTH_NAMES_SHORT[monthIndex];
   const weekday = WEEKDAY_SHORT[new Date(`${week.key}T12:00:00`).getDay()];
-  return { name: `Week ${week.index + 1}`, dates: `Payday ${weekday}, ${month} ${week.startDay}` };
+  return {
+    name: `${payFrequency === "biweekly" ? "Paycheck" : "Week"} ${week.index + 1}`,
+    dates: `Payday ${weekday}, ${month} ${week.startDay}`,
+  };
 }
 
 const $ = (id) => document.getElementById(id);
+
+function renderPayFrequencyFields(state) {
+  const biweekly = state.payFrequency === "biweekly";
+  $("paydayWeekdayField").hidden = biweekly;
+  $("paydayAnchorField").hidden = !biweekly;
+  $("payAmountLabel").textContent = biweekly
+    ? "Expected take-home per paycheck"
+    : "Expected weekly take-home";
+  $("payAmountHint").textContent = biweekly
+    ? "Your normal paycheck. Every payday you haven't filled in below uses this amount."
+    : "Your normal week. Every week you haven't filled in below uses this amount.";
+  $("thisWeekHeading").textContent = biweekly
+    ? "How much did you get paid?"
+    : "How much did you make this week?";
+  $("needHeading").textContent = biweekly
+    ? "What you need each paycheck"
+    : "What you need each week";
+  $("needUsualLabel").textContent = biweekly
+    ? "Your usual paycheck"
+    : "Your usual week";
+  $("stickyMinimumLabel").textContent =
+    biweekly ? "Break even / check" : "Break even / wk";
+  $("breakdownPeriodHeading").textContent =
+    biweekly ? "Per paycheck" : "Per week";
+}
 
 /* =====================================================================
    4. CALCULATE
@@ -368,7 +490,7 @@ function renderWeekRows() {
   // One card per paycheck. The bill list and totals inside are filled by renderWeeks on every change.
   $("weekList").innerHTML = results.weeks
     .map((week) => {
-      const label = weekLabel(week);
+      const label = weekLabel(week, new Date().getMonth(), results.payFrequency);
       const value = state.actuals[week.key] ?? "";
       return `
         <article class="paycheck" data-week-row="${week.index}">
@@ -395,22 +517,16 @@ function renderWeekRows() {
     })
     .join("");
 
-  // The "Current week" menu depends on which weeks exist, so rebuild it too.
-  const auto = results.autoWeekIndex;
-  const autoName = auto >= results.weeks.length ? "month is over" : weekLabel(results.weeks[auto]).name;
-  const options = [`<option value="auto">Automatic (today: ${autoName})</option>`];
-  results.weeks.forEach((week) => options.push(`<option value="${week.index}">${weekLabel(week).name}</option>`));
-  options.push(`<option value="${results.weeks.length}">Month is over</option>`);
-  $("currentWeek").innerHTML = options.join("");
-  $("currentWeek").value = String(state.currentWeek);
-  if ($("currentWeek").value === "") $("currentWeek").value = "auto";
 }
 
 function renderExpenseRows() {
   const state = activeState();
   const frequencyOptions = (selected) =>
     Object.entries(FREQUENCY_LABELS)
-      .map(([value, text]) => `<option value="${value}"${value === selected ? " selected" : ""}>${text}</option>`)
+      .map(
+        ([value, text]) =>
+          `<option value="${value}"${value === selected ? " selected" : ""}>${text}</option>`,
+      )
       .join("");
 
   $("expenseList").innerHTML = state.expenses
@@ -427,11 +543,11 @@ function renderExpenseRows() {
         <select id="exp-${expense.id}-frequency" data-expense-id="${expense.id}" data-expense-field="frequency" aria-label="How often">
           ${frequencyOptions(expense.frequency)}
         </select>
-        ${dueControl(expense)}
+        ${dueControl(expense, state.payFrequency)}
         <span class="expense-monthly" data-role="monthly"></span>
         <button type="button" class="remove-button" data-remove-expense="${expense.id}" aria-label="Remove ${escapeHtml(expense.name || "expense")}">×</button>
         <p class="field-error" id="exp-${expense.id}-amount-error" role="alert"></p>
-      </div>`
+      </div>`,
     )
     .join("");
 
@@ -439,34 +555,49 @@ function renderExpenseRows() {
 }
 
 function ordinal(day) {
-  const suffix = day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
+  const suffix =
+    day % 10 === 1 && day !== 11
+      ? "st"
+      : day % 10 === 2 && day !== 12
+        ? "nd"
+        : day % 10 === 3 && day !== 13
+          ? "rd"
+          : "th";
   return `${day}${suffix}`;
 }
 
 // When is this bill due? Monthly: a day of the month. Every 2 weeks: any one date it's due.
-function dueControl(expense) {
+function dueControl(expense, payFrequency) {
   const attrs = `class="expense-due" id="exp-${expense.id}-due" data-expense-id="${expense.id}" data-expense-field="due"`;
   if (expense.frequency === "monthly") {
     const day = Number.parseInt(expense.due, 10);
     const options = [`<option value="">No due day</option>`];
-    for (let d = 1; d <= 31; d++) options.push(`<option value="${d}"${d === day ? " selected" : ""}>Due ${ordinal(d)}</option>`);
+    for (let d = 1; d <= 31; d++)
+      options.push(
+        `<option value="${d}"${d === day ? " selected" : ""}>Due ${ordinal(d)}</option>`,
+      );
     return `<select ${attrs} aria-label="Day it's due each month">${options.join("")}</select>`;
   }
   if (expense.frequency === "biweekly") {
     const value = parseIsoDate(expense.due) ? expense.due : "";
     return `<input type="date" ${attrs} value="${value}" aria-label="A date it's due">`;
   }
-  return `<span class="expense-due expense-due-text">${expense.frequency === "weekly" ? "Every payday" : "Set aside monthly"}</span>`;
+  return `<span class="expense-due expense-due-text">${expense.frequency === "weekly" ? (payFrequency === "biweekly" ? "Every week" : "Every payday") : "Set aside monthly"}</span>`;
 }
 
 // Copies the state's values into the fixed inputs (used on load, reset, and What-If switches).
 function renderInputs() {
   const state = activeState();
   $("expectedWeekly").value = state.expectedWeekly;
+  $("payFrequency").value = state.payFrequency ?? "weekly";
+  $("paydayAnchor").value = state.paydayAnchor || defaultPaydayAnchor(state.paydayWeekday);
+  renderPayFrequencyFields(state);
   $("savingsAmount").value = state.savings.amount;
   $("outsideBalance").value = state.outsideBalance;
   validateAmount($("outsideBalance"));
-  $(state.savings.frequency === "weekly" ? "savingsWeekly" : "savingsMonthly").checked = true;
+  $(
+    state.savings.frequency === "weekly" ? "savingsWeekly" : "savingsMonthly",
+  ).checked = true;
   $("paydayWeekday").value = String(state.paydayWeekday);
   validateAmount($("expectedWeekly"));
   validateAmount($("savingsAmount"));
@@ -492,7 +623,10 @@ function refresh() {
 function renderResults(r, base) {
   const state = activeState();
   const today = new Date();
-  $("monthLabel").textContent = today.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  $("monthLabel").textContent = today.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
 
   renderHero(r, base);
   renderKpis(r, base);
@@ -520,18 +654,21 @@ function renderHero(r, base) {
 
   $("heroRemaining").textContent = signedMoney(r.projectedRemaining);
   $("stickyRemaining").textContent = signedMoney(r.projectedRemaining);
-  $("stickyMinimum").textContent = r.breakEvenPerOpenWeek === null ? "—" : money(r.breakEvenPerOpenWeek);
+  $("stickyMinimum").textContent =
+    r.breakEvenPerOpenWeek === null ? "—" : money(r.breakEvenPerOpenWeek);
 
   if (r.isPositive) {
-    $("heroMessage").textContent = clean(r.projectedRemaining) === 0
-      ? "You're projected to finish the month at exactly $0. Any dip in income will push it negative."
-      : `You're projected to finish the month ${money(r.projectedRemaining)} ahead after paying bills and saving.`;
+    $("heroMessage").textContent =
+      clean(r.projectedRemaining) === 0
+        ? "You're projected to finish the month at exactly $0. Any dip in income will push it negative."
+        : `You're projected to finish the month ${money(r.projectedRemaining)} ahead after paying bills and saving.`;
   } else {
     let message = `You need approximately ${money(r.deficit)} more income this month to reach $0.`;
     if (r.openWeekCount > 0) {
-      message += ` Over your ${r.openWeekCount} remaining week${r.openWeekCount === 1 ? "" : "s"}, that's ${money(r.extraPerOpenWeek)} more per week.`;
+      const period = r.payFrequency === "biweekly" ? "paycheck" : "week";
+      message += ` Over your ${r.openWeekCount} remaining ${period}${r.openWeekCount === 1 ? "" : "s"}, that's ${money(r.extraPerOpenWeek)} more per ${period}.`;
     } else {
-      message += " There are no weeks left this month to make it up.";
+      message += ` There are no ${r.payFrequency === "biweekly" ? "paychecks" : "weeks"} left this month to make it up.`;
     }
     $("heroMessage").textContent = message;
   }
@@ -560,7 +697,13 @@ function setKpi(id, valueText, subText, baseValue, currentValue) {
 // Lower half of the Income tile: of what's left from this check, how much is free to spend.
 function renderCanSpend(r, state) {
   const week = latestPaydayWeek(r.weeks) ?? r.weeks[0];
-  const room = spendingRoom(r.weeks, r.paychecks, week.index, state.paid, state.leftNow);
+  const room = spendingRoom(
+    r.weeks,
+    r.paychecks,
+    week.index,
+    state.paid,
+    state.leftNow,
+  );
 
   const input = $("leftNow");
   if (document.activeElement !== input) {
@@ -568,23 +711,39 @@ function renderCanSpend(r, state) {
     validateAmount(input);
   }
   // With the box empty, the plan's number stands in: the paycheck minus the bills checked off so far.
-  const planHave = spendingRoom(r.weeks, r.paychecks, week.index, state.paid, "").have;
+  const planHave = spendingRoom(
+    r.weeks,
+    r.paychecks,
+    week.index,
+    state.paid,
+    "",
+  ).have;
   input.placeholder = Math.max(0, planHave).toFixed(2);
 
   const next = r.weeks[week.index + 1];
-  const nextDate = next ? new Date(`${next.key}T12:00:00`) : new Date(new Date(`${week.key}T12:00:00`).getTime() + 7 * 86_400_000);
+  const nextDate = next
+    ? new Date(`${next.key}T12:00:00`)
+    : new Date(
+        new Date(`${week.key}T12:00:00`).getTime() +
+          (r.payFrequency === "biweekly" ? 14 : 7) * 86_400_000,
+      );
   const reasons = [];
-  if (room.dueNow > 0.005) reasons.push(`${money(room.dueNow)} for this week's unpaid bills`);
-  if (room.keepLater > 0.005) reasons.push(`${money(room.keepLater)} for ${weekLabel(r.weeks[room.shortIndex]).name}, which runs short`);
+  if (room.dueNow > 0.005)
+    reasons.push(`${money(room.dueNow)} for this paycheck's unpaid bills`);
+  if (room.keepLater > 0.005)
+    reasons.push(
+      `${money(room.keepLater)} for ${weekLabel(r.weeks[room.shortIndex], new Date().getMonth(), r.payFrequency).name}, which runs short`,
+    );
 
   const short = room.canSpend < -0.005;
   $("kpiCanSpend").textContent = money(Math.max(0, room.canSpend));
   $("kpiCanSpend").className = `kpi-value ${short ? "text-bad" : "text-good"}`;
-  $("kpiCanSpendSub").textContent = reasons.length === 0
-    ? `Nothing to hold back. It's all yours until ${shortDate(nextDate)}.`
-    : short
-      ? `You're ${money(-room.canSpend)} under what you need to keep: ${reasons.join(" + ")}.`
-      : `Keep ${money(room.keep)}: ${reasons.join(" + ")}.`;
+  $("kpiCanSpendSub").textContent =
+    reasons.length === 0
+      ? `Nothing to hold back. It's all yours until ${shortDate(nextDate)}.`
+      : short
+        ? `You're ${money(-room.canSpend)} under what you need to keep: ${reasons.join(" + ")}.`
+        : `Keep ${money(room.keep)}: ${reasons.join(" + ")}.`;
 }
 
 function renderKpis(r, base) {
@@ -594,20 +753,37 @@ function renderKpis(r, base) {
     "kpiIncome",
     money(r.projectedIncome),
     clean(vsPlan) === 0
-      ? `${r.weeks.length} weeks × ${money(r.expectedWeekly)}`
+      ? `${r.weeks.length} paychecks × ${money(r.expectedPaycheck)}`
       : `Plan was ${money(r.baselineMonthlyIncome)} (${signedMoney(vsPlan)})`,
     b.projectedIncome,
-    r.projectedIncome
+    r.projectedIncome,
   );
   renderCanSpend(r, activeState());
   const billCount = `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} this month`;
-  setKpi("kpiExpenses", money(r.monthlyExpenses), r.paidFromOther > 0 ? `${billCount} · ${money(r.paidFromOther)} from other source` : billCount, b.monthlyExpenses, r.monthlyExpenses);
+  setKpi(
+    "kpiExpenses",
+    money(r.monthlyExpenses),
+    r.paidFromOther > 0
+      ? `${billCount} · ${money(r.paidFromOther)} from other source`
+      : billCount,
+    b.monthlyExpenses,
+    r.monthlyExpenses,
+  );
   // Savings tile: checked-off savings plus any hand edits (⋯), then the all-time total.
   const adjust = amountOrZero(activeState().savingsAdjust);
   const addedThisMonth = r.savedThisMonth + adjust;
   const totalSaved = amountOrZero(activeState().savedBefore) + addedThisMonth;
-  const planned = r.monthlySavings > 0 ? `of ${money(r.monthlySavings)} planned` : "No savings goal set";
-  setKpi("kpiSavings", money(addedThisMonth), clean(adjust) === 0 ? planned : `${planned} · ${signedMoney(adjust)} by hand`);
+  const planned =
+    r.monthlySavings > 0
+      ? `of ${money(r.monthlySavings)} planned`
+      : "No savings goal set";
+  setKpi(
+    "kpiSavings",
+    money(addedThisMonth),
+    clean(adjust) === 0
+      ? planned
+      : `${planned} · ${signedMoney(adjust)} by hand`,
+  );
   $("kpiSavings").classList.toggle("text-bad", addedThisMonth < -0.005);
   $("kpiSavedTotal").textContent = money(totalSaved);
   $("kpiSavedTotal").classList.toggle("text-bad", totalSaved < -0.005);
@@ -626,11 +802,16 @@ function dueText(item) {
       const text = `Due ${MONTH_NAMES_SHORT[now.getMonth()]} ${item.dueDay}`;
       return item.beforePayday ? `${text} · before payday` : text;
     }
-    case "every": return "Every payday";
-    case "half": return "Half of an every-2-weeks bill";
-    case "yearly": return "Set aside for a yearly bill";
-    case "monthly": return "Once a month";
-    default: return "No due day set";
+    case "every":
+      return "Every payday";
+    case "half":
+      return "Half of an every-2-weeks bill";
+    case "yearly":
+      return "Set aside for a yearly bill";
+    case "monthly":
+      return "Once a month";
+    default:
+      return "No due day set";
   }
 }
 
@@ -640,15 +821,25 @@ let openBillMenu = null; // { area: "thisWeek" | "weekList", key }
 // The checklist of bills one paycheck covers. Tapping one marks it paid;
 // its ⋯ menu moves it off this paycheck ("pay from other source") or back.
 function billListHtml(plan, state, area) {
-  if (plan.items.length === 0) return `<p class="bill-empty">Nothing due from this paycheck.</p>`;
+  if (plan.items.length === 0)
+    return `<p class="bill-empty">Nothing due from this paycheck.</p>`;
   return plan.items
     .map((item) => {
       const key = `${plan.key}|${item.id}`;
       const safeKey = escapeHtml(key);
       const paid = Boolean(state.paid[key]);
       const menuOpen = openBillMenu?.area === area && openBillMenu.key === key;
-      const classes = ["bill-check", paid && "is-paid", item.isSavings && "is-savings", item.fromOther && "is-other"].filter(Boolean).join(" ");
-      const menu = item.isSavings ? "" : `
+      const classes = [
+        "bill-check",
+        paid && "is-paid",
+        item.isSavings && "is-savings",
+        item.fromOther && "is-other",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const menu = item.isSavings
+        ? ""
+        : `
           <button type="button" class="bill-more" data-bill-menu="${safeKey}" aria-label="More options for ${escapeHtml(item.name)}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋯</button>
           <div class="bill-menu" role="menu"${menuOpen ? "" : " hidden"}>
             <button type="button" role="menuitem" data-other-source="${safeKey}">${item.fromOther ? "Pay from this paycheck" : "Pay from other source"}</button>
@@ -669,7 +860,11 @@ function billListHtml(plan, state, area) {
 }
 
 function renderWeeks(r, state) {
-  const statusText = { actual: "Actual", assumed: "Past · assumed", open: "Upcoming" };
+  const statusText = {
+    actual: "Actual",
+    assumed: "Past · assumed",
+    open: "Upcoming",
+  };
   const thisWeek = latestPaydayWeek(r.weeks);
   const focusWeek = thisWeek ?? r.weeks[0]; // the card phones open on
 
@@ -683,19 +878,29 @@ function renderWeeks(r, state) {
     card.classList.toggle("is-short", plan.left < -0.005);
 
     const status = card.querySelector('[data-role="status"]');
-    status.dataset.status = isThisWeek && week.status !== "actual" ? "current" : week.status;
-    status.textContent = isThisWeek ? "This week" : statusText[week.status];
+    status.dataset.status =
+      isThisWeek && week.status !== "actual" ? "current" : week.status;
+    status.textContent = isThisWeek
+      ? r.payFrequency === "biweekly"
+        ? "This paycheck"
+        : "This week"
+      : statusText[week.status];
 
-    card.querySelector("input").placeholder = r.expectedWeekly.toFixed(2);
+    card.querySelector("input").placeholder = r.expectedPaycheck.toFixed(2);
 
     const diff = clean(week.difference);
     const diffCell = card.querySelector('[data-role="diff"]');
-    diffCell.textContent = week.status === "actual"
-      ? `${signedMoney(diff)} vs your usual week`
-      : `Counts as ${money(week.amountUsed)} (${week.status === "assumed" ? "assumed" : "expected"})`;
+    diffCell.textContent =
+      week.status === "actual"
+        ? `${signedMoney(diff)} vs your usual ${r.payFrequency === "biweekly" ? "paycheck" : "week"}`
+        : `Counts as ${money(week.amountUsed)} (${week.status === "assumed" ? "assumed" : "expected"})`;
     diffCell.className = `paycheck-diff ${week.status === "actual" && diff > 0 ? "text-good" : week.status === "actual" && diff < 0 ? "text-bad" : ""}`;
 
-    card.querySelector('[data-role="bills"]').innerHTML = billListHtml(plan, state, "weekList");
+    card.querySelector('[data-role="bills"]').innerHTML = billListHtml(
+      plan,
+      state,
+      "weekList",
+    );
     card.querySelector('[data-role="totals"]').innerHTML = `
       ${plan.fromOther > 0 ? `<div class="is-other"><dt>From other source</dt><dd>${money(plan.fromOther)}</dd></div>` : ""}
       <div><dt>Left from this check</dt><dd class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</dd></div>
@@ -706,9 +911,10 @@ function renderWeeks(r, state) {
     const carried = plan.running - plan.left;
     note.hidden = plan.left >= -0.005;
     if (!note.hidden) {
-      note.innerHTML = plan.running >= -0.005
-        ? `This check runs <strong>${money(-plan.left)} short</strong>. The ${money(carried)} left over from earlier checks covers it.`
-        : `This check runs <strong>${money(-plan.left)} short</strong>, and earlier checks don't cover it. You're ${money(-plan.running)} behind so far this month.`;
+      note.innerHTML =
+        plan.running >= -0.005
+          ? `This check runs <strong>${money(-plan.left)} short</strong>. The ${money(carried)} left over from earlier checks covers it.`
+          : `This check runs <strong>${money(-plan.left)} short</strong>, and earlier checks don't cover it. You're ${money(-plan.running)} behind so far this month.`;
     }
   });
 
@@ -717,7 +923,10 @@ function renderWeeks(r, state) {
   $("weeksHeading").textContent = `${count} paychecks in ${monthName}`;
   $("weekDots").innerHTML = "<span></span>".repeat(count);
   showWeek();
-  $("weekCountHint").textContent = `${monthName} has ${count} ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}, so this is a ${count}-week month.`;
+  $("weekCountHint").textContent =
+    state.payFrequency === "biweekly"
+      ? `Paydays every 2 weeks, anchored to ${new Date(`${state.paydayAnchor}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
+      : `${monthName} has ${count} ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}, so this is a ${count}-paycheck month.`;
 }
 
 // On phones the paycheck list shows one card at a time and swipes sideways.
@@ -746,23 +955,36 @@ function renderWeekDots(index) {
 function stepWeek(step) {
   const list = $("weekList");
   const cards = [...list.children];
-  const current = [...$("weekDots").children].findIndex((dot) => dot.classList.contains("is-active"));
+  const current = [...$("weekDots").children].findIndex((dot) =>
+    dot.classList.contains("is-active"),
+  );
   const target = cards[current + step];
   if (!target) return;
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  list.scrollTo({ left: target.offsetLeft - cards[0].offsetLeft, behavior: reduceMotion ? "auto" : "smooth" });
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  list.scrollTo({
+    left: target.offsetLeft - cards[0].offsetLeft,
+    behavior: reduceMotion ? "auto" : "smooth",
+  });
 }
 $("weekPrev").addEventListener("click", () => stepWeek(-1));
 $("weekNext").addEventListener("click", () => stepWeek(1));
 
-$("weekList").addEventListener("scroll", () => {
-  const list = $("weekList");
-  const cards = [...list.children];
-  if (!cards.length || list.scrollWidth <= list.clientWidth) return;
-  const offsets = cards.map((card) => Math.abs(card.offsetLeft - cards[0].offsetLeft - list.scrollLeft));
-  shownWeek = offsets.indexOf(Math.min(...offsets));
-  renderWeekDots(shownWeek);
-}, { passive: true });
+$("weekList").addEventListener(
+  "scroll",
+  () => {
+    const list = $("weekList");
+    const cards = [...list.children];
+    if (!cards.length || list.scrollWidth <= list.clientWidth) return;
+    const offsets = cards.map((card) =>
+      Math.abs(card.offsetLeft - cards[0].offsetLeft - list.scrollLeft),
+    );
+    shownWeek = offsets.indexOf(Math.min(...offsets));
+    renderWeekDots(shownWeek);
+  },
+  { passive: true },
+);
 
 // Coming back to the app always lands on this week's paycheck.
 function showThisWeek() {
@@ -776,7 +998,9 @@ window.addEventListener("pageshow", showThisWeek);
 
 function renderExpenseMonthly(r) {
   r.expenseLines.forEach((line) => {
-    const cell = document.querySelector(`[data-expense-row="${line.id}"] [data-role="monthly"]`);
+    const cell = document.querySelector(
+      `[data-expense-row="${line.id}"] [data-role="monthly"]`,
+    );
     if (cell) cell.textContent = money(line.monthly);
   });
   $("expenseTotal").textContent = money(r.monthlyExpenses);
@@ -792,8 +1016,13 @@ function latestPaydayWeek(weeks) {
 function renderThisWeek(r, state) {
   const latest = latestPaydayWeek(r.weeks);
   const week = latest ?? r.weeks[0]; // before this month's first payday, show the first one
-  const label = weekLabel(week);
-  $("thisWeekWhen").textContent = `${label.name} of ${r.weeks.length} · ${label.dates}${latest ? "" : " (upcoming)"}`;
+  const label = weekLabel(
+    week,
+    new Date().getMonth(),
+    baseline.payFrequency,
+  );
+  $("thisWeekWhen").textContent =
+    `${r.payFrequency === "biweekly" ? `Paycheck ${week.index + 1}` : label.name} of ${r.weeks.length} · ${label.dates}${latest ? "" : " (upcoming)"}`;
 
   const input = $("thisWeekPay");
   if (input.dataset.weekKey !== week.key || document.activeElement !== input) {
@@ -801,48 +1030,78 @@ function renderThisWeek(r, state) {
     input.value = state.actuals[week.key] ?? "";
     validateAmount(input);
   }
-  input.placeholder = r.expectedWeekly.toFixed(2);
+  input.placeholder = r.expectedPaycheck.toFixed(2);
 
-  const status = week.status === "actual"
-    ? `${signedMoney(week.difference)} vs your usual week`
-    : `Leave it blank and it counts as ${money(r.expectedWeekly)}`;
-  $("thisWeekResult").innerHTML = `${status} · Left this month: <strong class="${r.isPositive ? "text-good" : "text-bad"}">${signedMoney(r.projectedRemaining)}</strong>`;
+  const status =
+    week.status === "actual"
+      ? `${signedMoney(week.difference)} vs your usual paycheck`
+      : `Leave it blank and it counts as ${money(r.expectedPaycheck)}`;
+  $("thisWeekResult").innerHTML =
+    `${status} · Left this month: <strong class="${r.isPositive ? "text-good" : "text-bad"}">${signedMoney(r.projectedRemaining)}</strong>`;
 
   const plan = r.paychecks[week.index];
-  const paidCount = plan.items.filter((item) => state.paid[`${plan.key}|${item.id}`]).length;
+  const paidCount = plan.items.filter(
+    (item) => state.paid[`${plan.key}|${item.id}`],
+  ).length;
   $("thisWeekBills").innerHTML = billListHtml(plan, state, "thisWeek");
-  $("thisWeekProgress").textContent = plan.items.length ? `${paidCount} of ${plan.items.length} done` : "";
+  $("thisWeekProgress").textContent = plan.items.length
+    ? `${paidCount} of ${plan.items.length} done`
+    : "";
 
   // Until the next payday: the next card, or a week after the last one (next month's first).
   const next = r.weeks[week.index + 1];
-  const nextDate = next ? new Date(`${next.key}T12:00:00`) : new Date(new Date(`${week.key}T12:00:00`).getTime() + 7 * 86_400_000);
+  const nextDate = next
+    ? new Date(`${next.key}T12:00:00`)
+    : new Date(
+        new Date(`${week.key}T12:00:00`).getTime() +
+          (r.payFrequency === "biweekly" ? 14 : 7) * 86_400_000,
+      );
   // When a later check runs short, not all of this is spendable; the Income tile says how much is.
-  const laterShort = spendingRoom(r.weeks, r.paychecks, week.index, state.paid, "").keepLater > 0.005;
-  $("thisWeekSpend").innerHTML = plan.items.length === 0
-    ? `Nothing due from this paycheck. All ${money(week.amountUsed)} is yours until ${shortDate(nextDate)}.`
-    : `${money(week.amountUsed)} − ${money(plan.out)} = <strong class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</strong> ${plan.left < -0.005 ? "short" : laterShort ? "left" : "to spend"} until ${shortDate(nextDate)}${plan.fromOther > 0 ? ` <span class="hint">(${money(plan.fromOther)} paid from other source)</span>` : ""}`;
+  const laterShort =
+    spendingRoom(r.weeks, r.paychecks, week.index, state.paid, "").keepLater >
+    0.005;
+  $("thisWeekSpend").innerHTML =
+    plan.items.length === 0
+      ? `Nothing due from this paycheck. All ${money(week.amountUsed)} is yours until ${shortDate(nextDate)}.`
+      : `${money(week.amountUsed)} − ${money(plan.out)} = <strong class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</strong> ${plan.left < -0.005 ? "short" : laterShort ? "left" : "to spend"} until ${shortDate(nextDate)}${plan.fromOther > 0 ? ` <span class="hint">(${money(plan.fromOther)} paid from other source)</span>` : ""}`;
 }
 
 function renderNeeds(r) {
-  const weekWord = (n) => `week${n === 1 ? "" : "s"}`;
-  const perWeek = (amount) => (amount === null ? "—" : `${money(Math.max(0, amount))}<small>/wk</small>`);
+  const unit = r.payFrequency === "biweekly" ? "paycheck" : "week";
+  const shortUnit = r.payFrequency === "biweekly" ? "check" : "wk";
+  const weekWord = (n) => `${unit}${n === 1 ? "" : "s"}`;
+  const perPeriod = (amount) =>
+    amount === null
+      ? "—"
+      : `${money(Math.max(0, amount))}<small>/${shortUnit}</small>`;
   const breakEven = r.breakEvenPerOpenWeek;
 
-  $("needBreakEven").innerHTML = perWeek(breakEven);
-  $("needBreakEven").className = breakEven !== null && breakEven > r.expectedWeekly + 0.005 ? "text-bad" : "";
-  $("needOnPlan").innerHTML = perWeek(r.onPlanPerOpenWeek);
-  $("needUsual").innerHTML = perWeek(r.expectedWeekly);
-  $("needWeeksLeft").textContent = r.openWeekCount > 0
-    ? `For the ${r.openWeekCount} ${weekWord(r.openWeekCount)} left this month.`
-    : "No weeks left this month.";
+  $("needBreakEven").innerHTML = perPeriod(breakEven);
+  $("needBreakEven").className =
+    breakEven !== null && breakEven > r.expectedPaycheck + 0.005
+      ? "text-bad"
+      : "";
+  $("needOnPlan").innerHTML = perPeriod(r.onPlanPerOpenWeek);
+  $("needUsual").innerHTML = perPeriod(
+    r.payFrequency === "biweekly" ? r.expectedPaycheck : r.expectedWeekly,
+  );
+  $("needWeeksLeft").textContent =
+    r.openWeekCount > 0
+      ? `For the ${r.openWeekCount} remaining ${weekWord(r.openWeekCount)} this month.`
+      : `No ${unit}s left this month.`;
 
-  // Meter: your usual week, with a line where break-even sits.
+  // Meter: your usual pay amount, with a line where break-even sits.
   $("needMeter").hidden = breakEven === null;
   if (breakEven !== null) {
-    const scale = Math.max(r.expectedWeekly, breakEven, 1) * 1.15;
-    $("needMeterFill").style.width = `${(r.expectedWeekly / scale) * 100}%`;
-    $("needMeterFill").classList.toggle("is-bad", breakEven > r.expectedWeekly + 0.005);
-    $("needMeterMarker").style.left = `calc(${(breakEven / scale) * 100}% - 1px)`;
+    const usual = r.payFrequency === "biweekly" ? r.expectedPaycheck : r.expectedWeekly;
+    const scale = Math.max(usual, breakEven, 1) * 1.15;
+    $("needMeterFill").style.width = `${(usual / scale) * 100}%`;
+    $("needMeterFill").classList.toggle(
+      "is-bad",
+      breakEven > usual + 0.005,
+    );
+    $("needMeterMarker").style.left =
+      `calc(${(breakEven / scale) * 100}% - 1px)`;
   }
 
   // One plain sentence about where you stand.
@@ -850,38 +1109,50 @@ function renderNeeds(r) {
   let message;
   if (r.openWeekCount === 0) {
     tone = r.isPositive ? "is-good" : "is-bad";
-    message = `Every week this month is done or filled in. The month finishes at <strong>${signedMoney(r.projectedRemaining)}</strong>.`;
+    message = `Every ${unit} this month is done or filled in. The month finishes at <strong>${signedMoney(r.projectedRemaining)}</strong>.`;
   } else if (clean(breakEven) === 0) {
     tone = "is-good";
-    message = "Pay you've already received covers this month's bills and savings. Anything from here is extra.";
-  } else if (breakEven > r.expectedWeekly + 0.005) {
+    message =
+      "Pay you've already received covers this month's bills and savings. Anything from here is extra.";
+  } else if (breakEven > r.expectedPaycheck + 0.005) {
     tone = "is-bad";
-    message = `Your usual week isn't enough this month. You need about <strong>${money(breakEven - r.expectedWeekly)} more each week</strong> to avoid finishing negative.`;
+    message = `Your usual ${unit} isn't enough this month. You need about <strong>${money(breakEven - r.expectedPaycheck)} more per ${unit}</strong> to avoid finishing negative.`;
   } else if (r.shortfallVsPlan > 0.005) {
-    message = `You're <strong>${money(r.shortfallVsPlan)} behind plan</strong>, but your usual week still covers the ${money(breakEven)} you need, with ${money(r.expectedWeekly - breakEven)} to spare.`;
+    message = `You're <strong>${money(r.shortfallVsPlan)} behind plan</strong>, but your usual ${unit} still covers the ${money(breakEven)} you need, with ${money(r.expectedPaycheck - breakEven)} to spare.`;
   } else if (r.shortfallVsPlan < -0.005) {
     tone = "is-good";
-    message = `You're <strong>${money(-r.shortfallVsPlan)} ahead of plan</strong>. Your usual week covers the ${money(breakEven)} you need, with ${money(r.expectedWeekly - breakEven)} to spare.`;
+    message = `You're <strong>${money(-r.shortfallVsPlan)} ahead of plan</strong>. Your usual ${unit} covers the ${money(breakEven)} you need, with ${money(r.expectedPaycheck - breakEven)} to spare.`;
   } else {
     tone = "is-good";
-    message = `You're on plan. Your usual week covers the ${money(breakEven)} you need, with ${money(r.expectedWeekly - breakEven)} to spare.`;
+    message = `You're on plan. Your usual ${unit} covers the ${money(breakEven)} you need, with ${money(r.expectedPaycheck - breakEven)} to spare.`;
   }
   $("needMessage").innerHTML = `<p class="callout ${tone}">${message}</p>`;
 
-  const currentText = r.currentWeekIndex >= r.weeks.length ? "Month is over" : `${weekLabel(r.weeks[r.currentWeekIndex]).name} of ${r.weeks.length}`;
+  const currentText =
+    r.currentWeekIndex >= r.weeks.length
+      ? "Month is over"
+      : `${weekLabel(r.weeks[r.currentWeekIndex], new Date().getMonth(), r.payFrequency).name} of ${r.weeks.length}`;
   const facts = [
-    ["Current week", currentText],
-    ["Completed / remaining", `${r.completedWeekCount} done · ${r.openWeekCount} left`],
+    [r.payFrequency === "biweekly" ? "Current paycheck" : "Current week", currentText],
+    [
+      "Completed / remaining",
+      `${r.completedWeekCount} done · ${r.openWeekCount} left`,
+    ],
     ["Income received", money(r.incomeReceived)],
     ["Expected still to come", money(r.expectedStillToCome)],
     ["Needed this month", money(r.requiredMonthlyIncome)],
     ["Still required to reach $0", money(r.stillRequired)],
   ];
-  $("recoveryFacts").innerHTML = facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("");
+  $("recoveryFacts").innerHTML = facts
+    .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
+    .join("");
 
-  $("needExplain").innerHTML = r.openWeekCount === 0 ? "" : `
-    <p><strong>Break even:</strong> <span class="formula">${money(r.stillRequired)} still required ÷ ${r.openWeekCount} ${weekWord(r.openWeekCount)} = ${money(breakEven)}/wk</span></p>
-    <p><strong>Stay on plan:</strong> <span class="formula">${money(r.expectedWeekly)} usual ${r.shortfallVsPlan >= 0 ? "+" : "−"} ${money(Math.abs(r.shortfallVsPlan))} ${r.shortfallVsPlan >= 0 ? "behind" : "ahead"} ÷ ${r.openWeekCount} = ${money(r.onPlanPerOpenWeek)}/wk</span></p>`;
+  $("needExplain").innerHTML =
+    r.openWeekCount === 0
+      ? ""
+      : `
+    <p><strong>Break even:</strong> <span class="formula">${money(r.stillRequired)} still required ÷ ${r.openWeekCount} remaining ${weekWord(r.openWeekCount)} = ${money(breakEven)}/${shortUnit}</span></p>
+    <p><strong>Stay on plan:</strong> <span class="formula">${money(r.expectedPaycheck)} usual ${unit} ${r.shortfallVsPlan >= 0 ? "+" : "−"} ${money(Math.abs(r.shortfallVsPlan))} ${r.shortfallVsPlan >= 0 ? "behind" : "ahead"} ÷ ${r.openWeekCount} remaining ${weekWord(r.openWeekCount)} = ${money(r.onPlanPerOpenWeek)}/${shortUnit}</span></p>`;
 }
 
 // Side savings: the balance, minus every bill this month marked "pay from other source".
@@ -889,12 +1160,20 @@ function renderOutsideSavings(r, state) {
   const balance = parseMoney(state.outsideBalance).value ?? 0;
   const left = balance - r.paidFromOther;
   const uses = r.paychecks.flatMap((plan, i) =>
-    plan.items.filter((item) => item.fromOther).map((item) => ({ item, label: weekLabel(r.weeks[i]) })));
+    plan.items
+      .filter((item) => item.fromOther)
+      .map((item) => ({
+        item,
+        label: weekLabel(r.weeks[i], new Date().getMonth(), r.payFrequency),
+      })),
+  );
 
-  $("outsideLeft").innerHTML = `<span class="${left < -0.005 ? "text-bad" : ""}">${money(left)}</span> left`;
-  $("outsideUses").innerHTML = uses.length === 0
-    ? `<p class="hint">Nothing paid from here this month. On any bill, tap ⋯ → "Pay from other source" to take it from here instead of your paycheck.</p>`
-    : `<ul class="outside-list">
+  $("outsideLeft").innerHTML =
+    `<span class="${left < -0.005 ? "text-bad" : ""}">${money(left)}</span> left`;
+  $("outsideUses").innerHTML =
+    uses.length === 0
+      ? `<p class="hint">Nothing paid from here this month. On any bill, tap ⋯ → "Pay from other source" to take it from here instead of your paycheck.</p>`
+      : `<ul class="outside-list">
         ${uses.map(({ item, label }) => `<li><span>${escapeHtml(item.name)} <small>${label.name} · ${label.dates}</small></span><span>−${money(item.amount)}</span></li>`).join("")}
       </ul>
       <dl class="outside-totals">
@@ -909,10 +1188,14 @@ function renderOutsideSavings(r, state) {
 function renderSettingsSummary(r, state) {
   const savings = parseMoney(state.savings.amount).value ?? 0;
   const parts = [
-    `${money(r.expectedWeekly)}/week`,
-    `paid ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}`,
+    `${money(r.expectedPaycheck)}/${state.payFrequency === "biweekly" ? "paycheck" : "week"}`,
+    state.payFrequency === "biweekly"
+      ? `every 2 weeks from ${new Date(`${state.paydayAnchor}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      : `paid ${WEEKDAY_PLURAL[Number(state.paydayWeekday)]}`,
     `${r.expenseLines.length} bill${r.expenseLines.length === 1 ? "" : "s"} (${money(r.monthlyExpenses)})`,
-    savings > 0 ? `saving ${money(savings)}/${state.savings.frequency === "weekly" ? "paycheck" : "month"}` : "no savings goal",
+    savings > 0
+      ? `saving ${money(savings)}/${state.savings.frequency === "weekly" ? "paycheck" : "month"}`
+      : "no savings goal",
   ];
   $("settingsSummary").textContent = parts.join(" · ");
 }
@@ -934,10 +1217,14 @@ function renderFlow(r) {
     ["expenses", fromPay, "Expenses"],
     ["savings", r.monthlySavings, "Savings"],
   ];
-  if (r.projectedRemaining > 0) segments.push(["remaining", r.projectedRemaining, "Remaining"]);
+  if (r.projectedRemaining > 0)
+    segments.push(["remaining", r.projectedRemaining, "Remaining"]);
 
   let html = segments
-    .map(([css, amount, label]) => `<div class="flow-seg ${css}" style="width:${pct(amount)}%" title="${label}: ${money(amount)}"></div>`)
+    .map(
+      ([css, amount, label]) =>
+        `<div class="flow-seg ${css}" style="width:${pct(amount)}%" title="${label}: ${money(amount)}"></div>`,
+    )
     .join("");
 
   // When spending + saving is bigger than income, the bar runs past the income line.
@@ -951,24 +1238,53 @@ function renderFlow(r) {
   const incomePct = pct(r.projectedIncome);
   const labels = [`<span style="left:0">$0</span>`];
   const endClass = incomePct > 85 ? "is-end" : "";
-  labels.push(`<span class="${endClass}" style="left:${incomePct}%">Income ${money(r.projectedIncome)}</span>`);
+  labels.push(
+    `<span class="${endClass}" style="left:${incomePct}%">Income ${money(r.projectedIncome)}</span>`,
+  );
   $("flowScale").innerHTML = labels.join("");
 }
 
 function renderBreakdown(r) {
-  const perWeek = (amount) => (r.weeksInMonth > 0 ? amount / r.weeksInMonth : 0);
+  const perPayPeriod = (amount) =>
+    r.weeks.length > 0 ? amount / r.weeks.length : 0;
   const rows = [
-    ["remaining", "Income", money(r.projectedIncome), money(perWeek(r.projectedIncome)), null],
-    ["expenses", r.paidFromOther > 0 ? "Expenses from pay" : "Expenses", `−${money(r.monthlyExpenses - r.paidFromOther)}`, `−${money(perWeek(r.monthlyExpenses - r.paidFromOther))}`, null],
-    ["savings", "Savings", `−${money(r.monthlySavings)}`, `−${money(perWeek(r.monthlySavings))}`, null],
-    [null, "Remaining", signedMoney(r.projectedRemaining), signedMoney(perWeek(r.projectedRemaining)), r.isPositive ? "text-good" : "text-bad"],
+    [
+      "remaining",
+      "Income",
+      money(r.projectedIncome),
+      money(perPayPeriod(r.projectedIncome)),
+      null,
+    ],
+    [
+      "expenses",
+      r.paidFromOther > 0 ? "Expenses from pay" : "Expenses",
+      `−${money(r.monthlyExpenses - r.paidFromOther)}`,
+      `−${money(perPayPeriod(r.monthlyExpenses - r.paidFromOther))}`,
+      null,
+    ],
+    [
+      "savings",
+      "Savings",
+      `−${money(r.monthlySavings)}`,
+      `−${money(perPayPeriod(r.monthlySavings))}`,
+      null,
+    ],
+    [
+      null,
+      "Remaining",
+      signedMoney(r.projectedRemaining),
+      signedMoney(perPayPeriod(r.projectedRemaining)),
+      r.isPositive ? "text-good" : "text-bad",
+    ],
   ];
   $("breakdownBody").innerHTML = rows
-    .map(([swatch, label, month, week, css]) => `
+    .map(
+      ([swatch, label, month, week, css]) => `
       <tr${css ? ` class="${css}"` : ""}>
         <td>${swatch && label !== "Income" ? `<span class="swatch swatch-${swatch}"></span>` : ""}${label}</td>
         <td>${month}</td><td>${week}</td>
-      </tr>`)
+      </tr>`,
+    )
     .join("");
 }
 
@@ -977,12 +1293,16 @@ function renderExpenseBars(r) {
   const largest = Math.max(...lines.map((line) => line.monthly), 0);
 
   if (lines.length === 0) {
-    $("expenseBars").innerHTML = `<p class="empty">Your expenses will appear here, biggest first.</p>`;
+    $("expenseBars").innerHTML =
+      `<p class="empty">Your expenses will appear here, biggest first.</p>`;
     return;
   }
   $("expenseBars").innerHTML = lines
     .map((line) => {
-      const share = r.monthlyExpenses > 0 ? Math.round((line.monthly / r.monthlyExpenses) * 100) : 0;
+      const share =
+        r.monthlyExpenses > 0
+          ? Math.round((line.monthly / r.monthlyExpenses) * 100)
+          : 0;
       const width = largest > 0 ? (line.monthly / largest) * 100 : 0;
       return `
         <div class="hbar">
@@ -996,21 +1316,22 @@ function renderExpenseBars(r) {
 
 // The "How is this calculated" boxes show the real formula with your real numbers.
 function renderExplanations(r, state) {
-  const weekly = money(r.expectedWeekly);
+  const weekly = money(r.expectedPaycheck);
+  const period = r.payFrequency === "biweekly" ? "paycheck" : "week";
   const weekParts = r.weeks.map((week) => money(week.amountUsed));
 
   $("incomeExplain").innerHTML = `
-    <p><strong>Baseline:</strong> <span class="formula">${weekly} × ${r.weeks.length} weeks = ${money(r.baselineMonthlyIncome)}</span></p>
-    <p><strong>Projection:</strong> add up every week, using your actual amount where you entered one and ${weekly} where you didn't.</p>
+    <p><strong>Baseline:</strong> <span class="formula">${weekly} × ${r.weeks.length} paychecks = ${money(r.baselineMonthlyIncome)}</span></p>
+    <p><strong>Projection:</strong> add up every paycheck, using your actual amount where you entered one and ${weekly} where you didn't.</p>
     <p class="formula">${weekParts.join(" + ") || "$0.00"} = ${money(r.projectedIncome)}</p>
-    <p>Each payday this month is one week, so 5-payday months show more income than 4-payday months. Weekly bills and savings are counted the same way.</p>`;
+    <p>${r.payFrequency === "biweekly" ? "Paychecks follow the every-2-weeks schedule anchored to your selected payday date. Weekly bills are distributed across the weeks between paychecks; paycheck savings are subtracted from each paycheck." : "Each payday this month is one week, so 5-payday months show more income than 4-payday months. Weekly bills and paycheck savings are counted with each weekly payday."}</p>`;
 
-  const divisor = `÷ ${r.weeks.length} weeks`;
+  const divisor = `÷ ${r.weeks.length} ${r.payFrequency === "biweekly" ? "paychecks" : "weeks"}`;
   $("minimumExplain").innerHTML = `
-    <p><strong>If every week paid the same</strong> (the whole month, not just what's left):</p>
+    <p><strong>Average needed per ${period}</strong> (the whole month, not just what's left):</p>
     <p class="formula">${money(r.monthlyExpenses)} expenses + ${money(r.monthlySavings)} savings${r.paidFromOther > 0 ? ` − ${money(r.paidFromOther)} from other source` : ""} = ${money(r.requiredMonthlyIncome)} needed per month</p>
-    <p class="formula">${money(r.requiredMonthlyIncome)} ${divisor} = ${money(r.minimumWeeklyIncome)} per week</p>
-    <p>Buffer = what you expect − what you need: <span class="formula">${weekly} − ${money(r.minimumWeeklyIncome)} = ${signedMoney(r.weeklyBuffer)}</span></p>`;
+    <p class="formula">${money(r.requiredMonthlyIncome)} ${divisor} = ${money(r.minimumIncomePerPayPeriod)} per ${period}</p>
+    <p>Buffer = usual ${period} − average needed per ${period}: <span class="formula">${weekly} − ${money(r.minimumIncomePerPayPeriod)} = ${signedMoney(r.payPeriodBuffer)}</span></p>`;
 
   const savingsAmount = parseMoney(state.savings.amount).value ?? 0;
   $("savingsExplain").textContent =
@@ -1057,7 +1378,10 @@ function saveHistory(history) {
 
 function monthName(monthKey) {
   const [year, month] = monthKey.split("-").map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return new Date(year, month - 1, 1).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 // Builds the text report for one finished month from that month's saved state.
@@ -1065,7 +1389,7 @@ function buildMonthReport(monthKey, state) {
   const [year, month] = monthKey.split("-").map(Number);
   const lastDay = new Date(year, month, 0); // last day of that month
   // Calculate as if the month is over, so every week counts as finished.
-  const r = calculateBudget({ ...state, currentWeek: 99 }, lastDay);
+  const r = calculateBudget(state, lastDay);
 
   const enteredWeeks = r.weeks.filter((week) => week.status === "actual");
   const totalEntered = enteredWeeks.reduce((sum, week) => sum + week.actual, 0);
@@ -1075,30 +1399,43 @@ function buildMonthReport(monthKey, state) {
     `Dough Flow — ${monthName(monthKey)}`,
     `Saved ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
     "",
-    `Expected weekly take-home: ${money(r.expectedWeekly)}`,
-    `Weeks this month: ${r.weeks.length}`,
+    `Expected ${r.payFrequency === "biweekly" ? "biweekly paycheck" : "weekly take-home"}: ${money(r.expectedPaycheck)}`,
+    `Paychecks this month: ${r.weeks.length}`,
     "",
-    "WEEKS",
+    r.payFrequency === "biweekly" ? "PAYCHECKS" : "WEEKS",
   ];
   r.weeks.forEach((week) => {
-    const label = weekLabel(week, month - 1);
+    const label = weekLabel(week, month - 1, r.payFrequency);
+    const periodName = label.name;
     const amount = week.status === "actual" ? money(week.actual) : "—";
-    const note = week.status === "actual" ? "" : `  (not entered, counted as ${money(week.expected)})`;
-    lines.push(`  ${pad(label.name, 11)}${pad(label.dates, 14)}${amount}${note}`);
+    const note =
+      week.status === "actual"
+        ? ""
+        : `  (not entered, counted as ${money(week.expected)})`;
+    lines.push(
+      `  ${pad(periodName, 11)}${pad(label.dates, 14)}${amount}${note}`,
+    );
   });
   lines.push(
     "",
-    `Total pay entered:   ${money(totalEntered)}  (${enteredWeeks.length} of ${r.weeks.length} weeks)`,
-    `Month total:         ${money(r.projectedIncome)}  (entered pay + expected for blank weeks)`,
+    `Total pay entered:   ${money(totalEntered)}  (${enteredWeeks.length} of ${r.weeks.length} paychecks)`,
+    `Month total:         ${money(r.projectedIncome)}  (entered pay + expected for blank pay periods)`,
     "",
     `Bills & expenses:    ${money(r.monthlyExpenses)}`,
-    ...(r.paidFromOther > 0 ? [`  from other source: ${money(r.paidFromOther)}  (not from pay)`] : []),
+    ...(r.paidFromOther > 0
+      ? [`  from other source: ${money(r.paidFromOther)}  (not from pay)`]
+      : []),
     `Savings planned:     ${money(r.monthlySavings)}`,
     `Savings added:       ${money(r.savedThisMonth)}  (checked off)`,
     `Remaining:           ${signedMoney(r.projectedRemaining)}`,
-    ""
+    "",
   );
-  return { month: monthKey, totalEntered, monthTotal: r.projectedIncome, text: lines.join("\n") };
+  return {
+    month: monthKey,
+    totalEntered,
+    monthTotal: r.projectedIncome,
+    text: lines.join("\n"),
+  };
 }
 
 function downloadReport(report) {
@@ -1133,7 +1470,10 @@ function renderHistory(focusSelector) {
   $("historyList").innerHTML = history
     .map((item) => {
       const isOpen = item.month === openMenuMonth;
-      const deleteText = item.month === confirmDeleteMonth ? "Click again to delete" : "Delete month";
+      const deleteText =
+        item.month === confirmDeleteMonth
+          ? "Click again to delete"
+          : "Delete month";
       return `
       <li class="history-pill${isOpen ? " is-open" : ""}">
         <span class="history-month">${monthName(item.month)}</span>
@@ -1166,7 +1506,11 @@ $("historyList").addEventListener("click", (event) => {
     const month = menuButton.dataset.menuMonth;
     openMenuMonth = openMenuMonth === month ? null : month;
     confirmDeleteMonth = null;
-    renderHistory(openMenuMonth ? `[data-download-month="${month}"]` : `[data-menu-month="${month}"]`);
+    renderHistory(
+      openMenuMonth
+        ? `[data-download-month="${month}"]`
+        : `[data-menu-month="${month}"]`,
+    );
   } else if (downloadButton) {
     const month = downloadButton.dataset.downloadMonth;
     const report = loadHistory().find((item) => item.month === month);
@@ -1191,7 +1535,6 @@ function checkForNewMonth() {
   if (scenario) {
     scenario.actuals = {};
     scenario.actualsMonth = baseline.actualsMonth;
-    scenario.currentWeek = "auto";
   }
   archiveClosedMonth();
   renderInputs();
@@ -1209,7 +1552,8 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".history-pill")) closeHistoryMenu();
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && openMenuMonth) closeHistoryMenu(`[data-menu-month="${openMenuMonth}"]`);
+  if (event.key === "Escape" && openMenuMonth)
+    closeHistoryMenu(`[data-menu-month="${openMenuMonth}"]`);
 });
 
 /* =====================================================================
@@ -1224,7 +1568,9 @@ document.addEventListener("keydown", (event) => {
 function validateAmount(input) {
   const { error } = parseMoney(input.value);
   input.setAttribute("aria-invalid", error ? "true" : "false");
-  const errorEl = document.getElementById(`${input.id}-error`) || document.getElementById(`${input.id}Error`);
+  const errorEl =
+    document.getElementById(`${input.id}-error`) ||
+    document.getElementById(`${input.id}Error`);
   if (errorEl) errorEl.textContent = error;
 }
 
@@ -1245,12 +1591,24 @@ function handleChange(event) {
     validateAmount(el);
   } else if (el.name === "savingsFrequency") {
     state.savings.frequency = el.value;
+  } else if (el.id === "payFrequency") {
+    state.payFrequency = el.value;
+    if (state.payFrequency === "biweekly" && !parseIsoDate(state.paydayAnchor)) {
+      state.paydayAnchor = defaultPaydayAnchor(Number(state.paydayWeekday));
+    }
+    renderPayFrequencyFields(state);
+    structureChanged = true;
+    renderExpenseRows();
+  } else if (el.id === "paydayAnchor") {
+    const anchor = parseIsoDate(el.value);
+    state.paydayAnchor = anchor ? el.value : defaultPaydayAnchor(Number(state.paydayWeekday));
+    el.value = state.paydayAnchor;
+    if (anchor) state.paydayWeekday = anchor.getDay();
+    structureChanged = true;
   } else if (el.id === "paydayWeekday") {
     state.paydayWeekday = Number(el.value);
-    state.currentWeek = "auto";
+    state.paydayAnchor = defaultPaydayAnchor(state.paydayWeekday);
     structureChanged = true;
-  } else if (el.id === "currentWeek") {
-    state.currentWeek = el.value;
   } else if (el.id === "leftNow") {
     state.leftNow = el.value.trim() === "" ? "" : el.value;
     validateAmount(el);
@@ -1260,13 +1618,17 @@ function handleChange(event) {
     else state.actuals[el.dataset.weekKey] = el.value;
     validateAmount(el);
     // The This week card and the week's row are two boxes for the same week; keep them matching.
-    document.querySelectorAll(`[data-week-key="${el.dataset.weekKey}"]`).forEach((other) => {
-      if (other === el) return;
-      other.value = el.value;
-      validateAmount(other);
-    });
+    document
+      .querySelectorAll(`[data-week-key="${el.dataset.weekKey}"]`)
+      .forEach((other) => {
+        if (other === el) return;
+        other.value = el.value;
+        validateAmount(other);
+      });
   } else if (el.dataset.expenseId) {
-    const expense = state.expenses.find((item) => item.id === el.dataset.expenseId);
+    const expense = state.expenses.find(
+      (item) => item.id === el.dataset.expenseId,
+    );
     if (!expense) return;
     expense[el.dataset.expenseField] = el.value;
     if (el.dataset.expenseField === "amount") validateAmount(el);
@@ -1286,7 +1648,8 @@ function handleChange(event) {
 document.addEventListener("input", handleChange);
 document.addEventListener("change", (event) => {
   // <select> and radio buttons report through "change" in some browsers.
-  if (event.target.tagName === "SELECT" || event.target.type === "radio") handleChange(event);
+  if (event.target.tagName === "SELECT" || event.target.type === "radio")
+    handleChange(event);
 });
 
 /* ---------- Buttons ---------- */
@@ -1300,24 +1663,38 @@ function closeSavingsEditor(part, focusButton = true) {
   const form = savingsForm(part);
   if (!form || form.hidden) return;
   form.hidden = true;
-  document.querySelector(`[data-savings-menu="${part}"]`).setAttribute("aria-expanded", "false");
-  if (focusButton) document.querySelector(`[data-savings-menu="${part}"]`).focus();
+  document
+    .querySelector(`[data-savings-menu="${part}"]`)
+    .setAttribute("aria-expanded", "false");
+  if (focusButton)
+    document.querySelector(`[data-savings-menu="${part}"]`).focus();
 }
 
 function openSavingsEditor(part) {
-  ["month", "total"].forEach((other) => other !== part && closeSavingsEditor(other, false));
+  ["month", "total"].forEach(
+    (other) => other !== part && closeSavingsEditor(other, false),
+  );
   const form = savingsForm(part);
   form.hidden = false;
   form.querySelector("input").value = "";
   form.querySelector(".field-error").textContent = "";
   setSavingsMode(form, "add");
-  document.querySelector(`[data-savings-menu="${part}"]`).setAttribute("aria-expanded", "true");
+  document
+    .querySelector(`[data-savings-menu="${part}"]`)
+    .setAttribute("aria-expanded", "true");
   form.querySelector("input").focus();
 }
 
 function setSavingsMode(form, mode) {
   form.dataset.mode = mode;
-  form.querySelectorAll("[data-savings-mode]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.savingsMode === mode)));
+  form
+    .querySelectorAll("[data-savings-mode]")
+    .forEach((button) =>
+      button.setAttribute(
+        "aria-pressed",
+        String(button.dataset.savingsMode === mode),
+      ),
+    );
 }
 
 document.addEventListener("click", (event) => {
@@ -1343,7 +1720,8 @@ document.addEventListener("submit", (event) => {
   const input = form.querySelector("input");
   const { value, error } = parseMoney(input.value);
   if (error || value === null) {
-    form.querySelector(".field-error").textContent = error || "Enter an amount, like 100 or 100.50";
+    form.querySelector(".field-error").textContent =
+      error || "Enter an amount, like 100 or 100.50";
     input.focus();
     return;
   }
@@ -1357,11 +1735,25 @@ document.addEventListener("submit", (event) => {
   if (part === "month") {
     // Kept apart from the checkmarks, so checking a week's Savings still adds $50 on top.
     const adjust = amountOrZero(state.savingsAdjust);
-    state.savingsAdjust = round(mode === "add" ? adjust + value : mode === "remove" ? adjust - value : value - checked);
+    state.savingsAdjust = round(
+      mode === "add"
+        ? adjust + value
+        : mode === "remove"
+          ? adjust - value
+          : value - checked,
+    );
   } else {
     // The total is earlier months (savedBefore) plus this month, so edits land in savedBefore.
     const before = amountOrZero(state.savedBefore);
-    state.savedBefore = String(round(mode === "add" ? before + value : mode === "remove" ? before - value : value - thisMonth));
+    state.savedBefore = String(
+      round(
+        mode === "add"
+          ? before + value
+          : mode === "remove"
+            ? before - value
+            : value - thisMonth,
+      ),
+    );
   }
   if (!scenario) baseline.isExample = false;
   closeSavingsEditor(part);
@@ -1379,7 +1771,12 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   const menuButton = event.target.closest("[data-bill-menu]");
   const otherButton = event.target.closest("[data-other-source]");
-  if (!menuButton && !otherButton && openBillMenu && !event.target.closest(".bill-row.is-open")) {
+  if (
+    !menuButton &&
+    !otherButton &&
+    openBillMenu &&
+    !event.target.closest(".bill-row.is-open")
+  ) {
     openBillMenu = null;
     refresh();
     return;
@@ -1393,7 +1790,11 @@ document.addEventListener("click", (event) => {
     const isOpen = openBillMenu?.area === area && openBillMenu.key === key;
     openBillMenu = isOpen ? null : { area, key };
     refresh();
-    document.querySelector(`${scope} [${isOpen ? "data-bill-menu" : "data-other-source"}="${CSS.escape(key)}"]`)?.focus();
+    document
+      .querySelector(
+        `${scope} [${isOpen ? "data-bill-menu" : "data-other-source"}="${CSS.escape(key)}"]`,
+      )
+      ?.focus();
     return;
   }
   const state = activeState();
@@ -1403,7 +1804,9 @@ document.addEventListener("click", (event) => {
   if (!scenario) baseline.isExample = false;
   openBillMenu = null;
   refresh();
-  document.querySelector(`${scope} [data-bill-menu="${CSS.escape(key)}"]`)?.focus();
+  document
+    .querySelector(`${scope} [data-bill-menu="${CSS.escape(key)}"]`)
+    ?.focus();
 });
 
 document.addEventListener("keydown", (event) => {
@@ -1411,7 +1814,9 @@ document.addEventListener("keydown", (event) => {
   const { area, key } = openBillMenu;
   openBillMenu = null;
   refresh();
-  document.querySelector(`#${area} [data-bill-menu="${CSS.escape(key)}"]`)?.focus();
+  document
+    .querySelector(`#${area} [data-bill-menu="${CSS.escape(key)}"]`)
+    ?.focus();
 });
 
 // Tapping a bill on a paycheck marks it paid (or unpaid). The list redraws, so focus goes back to it.
@@ -1425,11 +1830,19 @@ document.addEventListener("click", (event) => {
   if (!scenario) baseline.isExample = false;
   const area = button.closest("#thisWeek") ? "#thisWeek" : "#weekList";
   refresh();
-  document.querySelector(`${area} [data-paid-key="${CSS.escape(key)}"]`)?.focus();
+  document
+    .querySelector(`${area} [data-paid-key="${CSS.escape(key)}"]`)
+    ?.focus();
 });
 
 $("addExpense").addEventListener("click", () => {
-  const expense = { id: newId(), name: "", amount: "", frequency: "monthly", due: "" };
+  const expense = {
+    id: newId(),
+    name: "",
+    amount: "",
+    frequency: "monthly",
+    due: "",
+  };
   activeState().expenses.push(expense);
   if (!scenario) baseline.isExample = false;
   renderExpenseRows();
@@ -1441,7 +1854,9 @@ $("expenseList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-remove-expense]");
   if (!button) return;
   const state = activeState();
-  state.expenses = state.expenses.filter((expense) => expense.id !== button.dataset.removeExpense);
+  state.expenses = state.expenses.filter(
+    (expense) => expense.id !== button.dataset.removeExpense,
+  );
   if (!scenario) baseline.isExample = false;
   renderExpenseRows();
   refresh();
@@ -1530,23 +1945,33 @@ let backupMessageTimer = null;
 function renderBackupStatus(message, tone) {
   clearTimeout(backupMessageTimer);
   $("backupStatus").classList.toggle("text-good", tone === "good");
-  if (message) backupMessageTimer = setTimeout(() => renderBackupStatus(), 6000);
+  if (message)
+    backupMessageTimer = setTimeout(() => renderBackupStatus(), 6000);
   let lastBackup = null;
   try {
     lastBackup = localStorage.getItem(BACKUP_DATE_KEY);
   } catch (error) {
     /* storage unavailable */
   }
-  $("backupStatus").textContent = message
-    ?? (lastBackup
+  $("backupStatus").textContent =
+    message ??
+    (lastBackup
       ? `Last backup: ${new Date(lastBackup).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
       : "No backup yet");
 }
 
 $("backupButton").addEventListener("click", () => {
   const savedAt = new Date();
-  const backup = { app: "personal-budget-dashboard", version: 1, savedAt: savedAt.toISOString(), budget: baseline, history: loadHistory() };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const backup = {
+    app: "personal-budget-dashboard",
+    version: 1,
+    savedAt: savedAt.toISOString(),
+    budget: baseline,
+    history: loadHistory(),
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {
+    type: "application/json",
+  });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   // The time keeps two backups made on the same day from overwriting each other.
@@ -1561,7 +1986,10 @@ $("backupButton").addEventListener("click", () => {
   } catch (error) {
     /* storage unavailable */
   }
-  renderBackupStatus("Your information for the month has been backed up!", "good");
+  renderBackupStatus(
+    "Your information for the month has been backed up!",
+    "good",
+  );
 });
 
 $("restoreButton").addEventListener("click", () => $("restoreFile").click());
@@ -1577,15 +2005,23 @@ $("restoreFile").addEventListener("change", async (event) => {
   } catch (error) {
     backup = null;
   }
-  if (!backup || backup.app !== "personal-budget-dashboard" || typeof backup.budget !== "object" || !Array.isArray(backup.history)) {
-    renderBackupStatus("That file isn't a budget backup. Pick a budget-backup-….json file.");
+  if (
+    !backup ||
+    backup.app !== "personal-budget-dashboard" ||
+    typeof backup.budget !== "object" ||
+    !Array.isArray(backup.history)
+  ) {
+    renderBackupStatus(
+      "That file isn't a budget backup. Pick a budget-backup-….json file.",
+    );
     return;
   }
 
   // Months already in history stay; the backup fills in any that are missing.
   const history = loadHistory();
   for (const item of backup.history) {
-    if (!history.some((existing) => existing.month === item.month)) history.push(item);
+    if (!history.some((existing) => existing.month === item.month))
+      history.push(item);
   }
   history.sort((a, b) => b.month.localeCompare(a.month));
   saveHistory(history);
@@ -1594,7 +2030,8 @@ $("restoreFile").addEventListener("change", async (event) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(backup.budget));
     // The file just restored is a backup too; keep the newer of the two dates.
     const lastBackup = localStorage.getItem(BACKUP_DATE_KEY);
-    if (!lastBackup || lastBackup < backup.savedAt) localStorage.setItem(BACKUP_DATE_KEY, backup.savedAt);
+    if (!lastBackup || lastBackup < backup.savedAt)
+      localStorage.setItem(BACKUP_DATE_KEY, backup.savedAt);
   } catch (error) {
     /* storage unavailable — the restore still shows until the page closes */
   }
@@ -1626,7 +2063,9 @@ if ("IntersectionObserver" in window) {
    The choice is a per-device convenience, so it lives in this browser, not the synced budget. */
 
 const STYLE_KEY = "personal-budget-dashboard-style";
-const themeColorMetas = [...document.querySelectorAll('meta[name="theme-color"]')];
+const themeColorMetas = [
+  ...document.querySelectorAll('meta[name="theme-color"]'),
+];
 themeColorMetas.forEach((meta) => (meta.dataset.classic = meta.content));
 
 function applyStyle(style) {
@@ -1634,15 +2073,21 @@ function applyStyle(style) {
   if (glass) document.documentElement.dataset.style = "glass";
   else delete document.documentElement.dataset.style;
   $("styleSwitch").setAttribute("aria-checked", String(glass));
-  themeColorMetas.forEach((meta) => (meta.content = glass ? "#f1ecff" : meta.dataset.classic));
+  themeColorMetas.forEach(
+    (meta) => (meta.content = glass ? "#f1ecff" : meta.dataset.classic),
+  );
 }
 
 $("styleSwitch").addEventListener("click", () => {
-  const next = document.documentElement.dataset.style === "glass" ? "classic" : "glass";
+  const next =
+    document.documentElement.dataset.style === "glass" ? "classic" : "glass";
   // A short cross-fade between looks (skipped for people who prefer less motion).
   if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     document.documentElement.classList.add("is-restyling");
-    setTimeout(() => document.documentElement.classList.remove("is-restyling"), 450);
+    setTimeout(
+      () => document.documentElement.classList.remove("is-restyling"),
+      450,
+    );
   }
   applyStyle(next);
   try {
@@ -1652,11 +2097,14 @@ $("styleSwitch").addEventListener("click", () => {
   }
 });
 
-applyStyle(document.documentElement.dataset.style === "glass" ? "glass" : "classic");
+applyStyle(
+  document.documentElement.dataset.style === "glass" ? "glass" : "classic",
+);
 
 /* ---------- Start ---------- */
 // Budget settings start folded once you're set up; open while setting up or using the example.
-$("settingsDetails").open = baseline.isExample || moneyOrZero(baseline.expectedWeekly) === 0;
+$("settingsDetails").open =
+  baseline.isExample || moneyOrZero(baseline.expectedWeekly) === 0;
 archiveClosedMonth();
 renderInputs(); // also saves, so the cleared month is stored and can't be archived twice
 renderHistory();
@@ -1675,7 +2123,8 @@ const PAY_LINK_WAIT_MS = 6000; // offline, or sync never answers: save anyway
 
   const { value } = parseMoney(params.get("pay"));
   if (value === null) {
-    monthNoticeText = "The pay from your reminder couldn't be saved. Enter it in the week below.";
+    monthNoticeText =
+      `The pay from your reminder couldn't be saved. Enter it in the ${baseline.payFrequency === "biweekly" ? "paycheck" : "week"} below.`;
     renderBanners();
     return;
   }
@@ -1690,16 +2139,22 @@ const PAY_LINK_WAIT_MS = 6000; // offline, or sync never answers: save anyway
 
     const week = latestPaydayWeek(calculate(baseline).weeks);
     if (!week) {
-      monthNoticeText = "The pay from your reminder couldn't be saved. Enter it in the week below.";
+      monthNoticeText =
+        `The pay from your reminder couldn't be saved. Enter it in the ${baseline.payFrequency === "biweekly" ? "paycheck" : "week"} below.`;
       renderBanners();
       return;
     }
-    const label = weekLabel(week);
+    const label = weekLabel(
+      week,
+      new Date().getMonth(),
+      baseline.payFrequency,
+    );
     const existing = parseMoney(baseline.actuals[week.key]).value;
     if (existing !== null) {
-      monthNoticeText = existing === value
-        ? `${label.name} (${label.dates}) already has ${money(existing)}.`
-        : `${label.name} (${label.dates}) already has ${money(existing)}, so ${money(value)} from this reminder wasn't saved. Change it in the week below if it's wrong.`;
+      monthNoticeText =
+        existing === value
+          ? `${label.name} (${label.dates}) already has ${money(existing)}.`
+          : `${label.name} (${label.dates}) already has ${money(existing)}, so ${money(value)} from this reminder wasn't saved. Change it in the ${baseline.payFrequency === "biweekly" ? "paycheck" : "week"} below if it's wrong.`;
       renderBanners();
       return;
     }
