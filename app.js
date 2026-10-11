@@ -1372,9 +1372,9 @@ function renderBanners() {
 
 /* =====================================================================
    6b. MONTHLY HISTORY
-   When a month ends, its weeks and pay are written into a plain-text
-   report and kept in browser storage. Each month shows as a pill in the
-   Monthly history panel; its ⋯ menu downloads the .txt or deletes it.
+   When a month ends, its pay, bills, and savings are saved as a report
+   and kept in browser storage. Each month shows as a pill in the Monthly
+   history panel, with buttons to download its PDF or delete it.
    ===================================================================== */
 
 const HISTORY_KEY = "personal-budget-dashboard-history-v1";
@@ -1405,7 +1405,8 @@ function monthName(monthKey) {
   });
 }
 
-// Builds the text report for one finished month from that month's saved state.
+// Builds the report for one finished month from that month's saved state:
+// `data` is what the PDF is drawn from; `text` is the older plain-text version.
 function buildMonthReport(monthKey, state) {
   const [year, month] = monthKey.split("-").map(Number);
   const lastDay = new Date(year, month, 0); // last day of that month
@@ -1456,18 +1457,171 @@ function buildMonthReport(monthKey, state) {
     totalEntered,
     monthTotal: r.projectedIncome,
     text: lines.join("\n"),
+    data: {
+      savedOn: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      paychecks: r.weeks.map((week) => {
+        const label = weekLabel(week, month - 1, r.payFrequency);
+        return {
+          name: label.name,
+          payday: label.dates,
+          amount: week.amountUsed,
+          entered: week.status === "actual",
+        };
+      }),
+      income: r.projectedIncome,
+      bills: r.expenseLines.map((line) => ({
+        name: line.name,
+        amount: line.monthly,
+      })),
+      billsTotal: r.monthlyExpenses,
+      paidFromOther: r.paidFromOther,
+      savingsPlanned: r.monthlySavings,
+      savingsAdded: r.savedThisMonth,
+      remaining: r.projectedRemaining,
+    },
   };
 }
 
-function downloadReport(report) {
-  const blob = new Blob([report.text], { type: "text/plain" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `budget-${report.month}.txt`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+/* ---------- The month's PDF ----------
+   Built with jsPDF, fetched the first time you download a report (so it needs a connection then).
+   The built-in PDF font only has basic Latin characters, so money uses a plain "-" here. */
+
+const PDF_LIBRARY_URL =
+  "https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.3/jspdf.umd.min.js";
+let pdfLibrary = null;
+
+function loadPdfLibrary() {
+  pdfLibrary ??= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = PDF_LIBRARY_URL;
+    script.onload = () => resolve(window.jspdf.jsPDF);
+    script.onerror = () => {
+      pdfLibrary = null; // lets the next click try again
+      script.remove();
+      reject(new Error("The PDF library didn't load"));
+    };
+    document.head.appendChild(script);
+  });
+  return pdfLibrary;
+}
+
+function pdfMoney(number) {
+  const value = clean(number);
+  return (value < 0 ? "-" : "") + currency.format(Math.abs(value));
+}
+
+async function downloadReportPdf(report) {
+  const jsPDF = await loadPdfLibrary();
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const left = 54;
+  const right = 558;
+  const bottom = 730;
+  let y = 70;
+
+  const INK = [23, 37, 42];
+  const MUTED = [110, 122, 128];
+  const ACCENT = [14, 101, 116];
+  const GOOD = [21, 128, 61];
+  const BAD = [185, 28, 28];
+
+  // Start a new page when the next block won't fit.
+  const room = (height) => {
+    if (y + height <= bottom) return;
+    doc.addPage();
+    y = 70;
+  };
+  const heading = (text) => {
+    room(60);
+    y += 18;
+    doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(...ACCENT);
+    doc.text(text, left, y);
+    y += 7;
+    doc.setDrawColor(205, 214, 218).line(left, y, right, y);
+    y += 18;
+  };
+  // One line: a label on the left, an amount on the right, an optional grey note between.
+  const row = (label, amount, { bold = false, note = "", color = INK } = {}) => {
+    room(18);
+    doc.setFont("helvetica", bold ? "bold" : "normal").setFontSize(11);
+    doc.setTextColor(...(bold ? color : INK));
+    doc.text(doc.splitTextToSize(String(label), 250)[0], left, y);
+    doc.text(amount, right, y, { align: "right" });
+    if (note) {
+      doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED);
+      doc.text(note, right - 90, y, { align: "right" });
+    }
+    y += 18;
+  };
+  const totalRow = (label, amount, options) => {
+    room(26);
+    doc.setDrawColor(205, 214, 218).line(left, y - 8, right, y - 8);
+    y += 4;
+    row(label, amount, { bold: true, ...options });
+  };
+
+  doc.setFont("helvetica", "bold").setFontSize(22).setTextColor(...INK);
+  doc.text("Dough Flow", left, y);
+  y += 22;
+  doc.setFont("helvetica", "normal").setFontSize(14).setTextColor(...ACCENT);
+  doc.text(`${monthName(report.month)} report`, left, y);
+  y += 10;
+
+  const d = report.data;
+  if (!d) {
+    // Months saved before the PDF existed only kept their totals, as text.
+    y += 20;
+    doc.setFont("courier", "normal").setFontSize(10).setTextColor(...INK);
+    for (const line of report.text.split("\n").slice(1)) {
+      room(14);
+      doc.text(line.replaceAll("−", "-"), left, y);
+      y += 14;
+    }
+    doc.save(`dough-flow-${report.month}.pdf`);
+    return;
+  }
+
+  heading("What you made");
+  d.paychecks.forEach((check) =>
+    row(`${check.name}  ·  ${check.payday}`, pdfMoney(check.amount), {
+      note: check.entered ? "" : "not entered, usual pay counted",
+    }),
+  );
+  totalRow("Total made", pdfMoney(d.income));
+
+  heading("Where it went");
+  if (d.bills.length === 0) row("No bills or expenses", pdfMoney(0));
+  [...d.bills]
+    .sort((a, b) => b.amount - a.amount)
+    .forEach((bill) =>
+      row(bill.name, pdfMoney(bill.amount), {
+        note:
+          d.income > 0
+            ? `${Math.round((bill.amount / d.income) * 100)}% of what you made`
+            : "",
+      }),
+    );
+  totalRow("Total bills & expenses", pdfMoney(d.billsTotal));
+  if (d.paidFromOther > 0)
+    row("Paid from other source, not from pay", pdfMoney(d.paidFromOther));
+  row("Savings planned", pdfMoney(d.savingsPlanned), {
+    note: `${pdfMoney(d.savingsAdded)} checked off`,
+  });
+
+  heading("What was left over");
+  row("Made", pdfMoney(d.income));
+  row("Bills & expenses paid from pay", pdfMoney(-(d.billsTotal - d.paidFromOther)));
+  row("Savings", pdfMoney(-d.savingsPlanned));
+  totalRow("Left over", pdfMoney(d.remaining), {
+    color: d.remaining < -0.005 ? BAD : GOOD,
+  });
+
+  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED);
+  doc.text(`Saved ${d.savedOn}`, left, 760);
+  doc.save(`dough-flow-${report.month}.pdf`);
 }
 
 // Runs once on load: if a month just ended, add its report to the history.
@@ -1481,7 +1635,6 @@ function archiveClosedMonth() {
   saveHistory(history);
 }
 
-let openMenuMonth = null; // which pill's ⋯ menu is open
 let confirmDeleteMonth = null; // Delete asks once before removing
 
 // Redrawing the list drops keyboard focus, so `focusSelector` puts it back.
@@ -1490,62 +1643,60 @@ function renderHistory(focusSelector) {
   $("historyEmpty").hidden = history.length > 0;
   $("historyList").innerHTML = history
     .map((item) => {
-      const isOpen = item.month === openMenuMonth;
-      const deleteText =
-        item.month === confirmDeleteMonth
-          ? "Click again to delete"
-          : "Delete month";
+      const month = escapeHtml(item.month);
+      const name = escapeHtml(monthName(item.month));
+      const confirming = item.month === confirmDeleteMonth;
       return `
-      <li class="history-pill${isOpen ? " is-open" : ""}">
-        <span class="history-month">${monthName(item.month)}</span>
+      <li class="history-pill">
+        <span class="history-month">${name}</span>
         <span class="history-total">${money(item.monthTotal)}</span>
-        <button type="button" class="history-menu-button" data-menu-month="${item.month}"
-          aria-label="Options for ${monthName(item.month)}" aria-haspopup="menu" aria-expanded="${isOpen}">⋯</button>
-        <div class="history-menu" role="menu"${isOpen ? "" : " hidden"}>
-          <button type="button" role="menuitem" data-download-month="${item.month}">Download .txt</button>
-          <button type="button" role="menuitem" class="is-danger" data-delete-month="${item.month}">${deleteText}</button>
-        </div>
+        <span class="history-actions">
+          <button type="button" class="button button-small" data-download-month="${month}"
+            aria-label="Download the ${name} PDF">Download PDF</button>
+          <button type="button" class="button button-small button-quiet history-delete" data-delete-month="${month}"
+            aria-label="${confirming ? "Confirm deleting" : "Delete"} ${name}">${confirming ? "Confirm delete" : "Delete"}</button>
+        </span>
       </li>`;
     })
     .join("");
   if (focusSelector) $("historyList").querySelector(focusSelector)?.focus();
 }
 
-function closeHistoryMenu(focusSelector) {
-  if (openMenuMonth === null && confirmDeleteMonth === null) return;
-  openMenuMonth = null;
+function cancelDeleteConfirm() {
+  if (confirmDeleteMonth === null) return;
   confirmDeleteMonth = null;
-  renderHistory(focusSelector);
+  renderHistory();
 }
 
-$("historyList").addEventListener("click", (event) => {
-  const menuButton = event.target.closest("[data-menu-month]");
+$("historyList").addEventListener("click", async (event) => {
   const downloadButton = event.target.closest("[data-download-month]");
   const deleteButton = event.target.closest("[data-delete-month]");
 
-  if (menuButton) {
-    const month = menuButton.dataset.menuMonth;
-    openMenuMonth = openMenuMonth === month ? null : month;
-    confirmDeleteMonth = null;
-    renderHistory(
-      openMenuMonth
-        ? `[data-download-month="${month}"]`
-        : `[data-menu-month="${month}"]`,
-    );
-  } else if (downloadButton) {
+  if (downloadButton) {
     const month = downloadButton.dataset.downloadMonth;
     const report = loadHistory().find((item) => item.month === month);
-    if (report) downloadReport(report);
-    closeHistoryMenu(`[data-menu-month="${month}"]`);
+    if (!report) return;
+    downloadButton.disabled = true;
+    $("historyStatus").textContent = "Making your PDF…";
+    try {
+      await downloadReportPdf(report);
+      $("historyStatus").textContent = "";
+    } catch (error) {
+      console.error(error);
+      $("historyStatus").textContent =
+        "The PDF couldn't be made. Check your connection and try again.";
+    }
+    downloadButton.disabled = false;
   } else if (deleteButton) {
     const month = deleteButton.dataset.deleteMonth;
     if (confirmDeleteMonth !== month) {
       confirmDeleteMonth = month;
-      renderHistory(`[data-delete-month="${month}"]`);
+      renderHistory(`[data-delete-month="${CSS.escape(month)}"]`);
       return;
     }
+    confirmDeleteMonth = null;
     saveHistory(loadHistory().filter((item) => item.month !== month));
-    closeHistoryMenu("[data-menu-month]"); // focus moves to the next month's ⋯
+    renderHistory("[data-download-month]"); // focus moves to the next month
   }
 });
 
@@ -1570,13 +1721,12 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", checkForNewMonth);
 
-// Clicking anywhere else, or pressing Escape, closes the menu.
+// Clicking anywhere else, or pressing Escape, backs out of a delete.
 document.addEventListener("click", (event) => {
-  if (!event.target.closest(".history-pill")) closeHistoryMenu();
+  if (!event.target.closest("[data-delete-month]")) cancelDeleteConfirm();
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && openMenuMonth)
-    closeHistoryMenu(`[data-menu-month="${openMenuMonth}"]`);
+  if (event.key === "Escape") cancelDeleteConfirm();
 });
 
 /* =====================================================================

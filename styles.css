@@ -1266,6 +1266,7 @@ input[aria-invalid="true"] {
 
 /* ---------- Monthly history ---------- */
 .history-list {
+  container-type: inline-size;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1294,54 +1295,30 @@ input[aria-invalid="true"] {
   font-weight: 600;
   color: var(--accent);
 }
-.history-menu-button {
-  width: 32px;
-  height: 32px;
+.history-actions {
+  display: flex;
+  gap: 6px;
   flex: none;
-  border: 0;
+}
+.history-actions .button {
   border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 1.2rem;
-  line-height: 1;
-  cursor: pointer;
 }
-.history-menu-button:hover,
-.history-pill.is-open .history-menu-button {
-  background: var(--surface);
-}
-.history-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 10;
-  min-width: 190px;
-  padding: 4px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-  display: grid;
-}
-.history-menu[hidden] {
-  display: none;
-}
-.history-menu button {
-  text-align: left;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-.history-menu button:hover {
-  background: var(--surface-2);
-}
-.history-menu .is-danger {
+.history-delete {
   color: var(--bad);
+}
+/* Narrow panels: the buttons drop to their own line under the month. */
+@container (max-width: 430px) {
+  .history-pill {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    border-radius: 16px;
+  }
+  .history-actions {
+    width: 100%;
+  }
+  .history-actions .button {
+    flex: 1;
+  }
 }
 
 /* ---------- Cloud sync ---------- */
@@ -2631,26 +2608,22 @@ input[aria-invalid="true"] {
 }
 :root[data-style="glass"] .bill-more,
 :root[data-style="glass"] .kpi-more,
-:root[data-style="glass"] .history-menu-button,
 :root[data-style="glass"] .remove-button {
   border-radius: 999px;
 }
 
 /* Pop-up menus: solid white stickers */
-:root[data-style="glass"] .bill-menu,
-:root[data-style="glass"] .history-menu {
+:root[data-style="glass"] .bill-menu {
   background: #fff;
   border: 2px solid var(--ink);
   border-radius: 16px;
   box-shadow: 0 4px 0 var(--ink);
   padding: 6px;
 }
-:root[data-style="glass"] .bill-menu button,
-:root[data-style="glass"] .history-menu button {
+:root[data-style="glass"] .bill-menu button {
   border-radius: 10px;
 }
-:root[data-style="glass"] .bill-menu button:hover,
-:root[data-style="glass"] .history-menu button:hover {
+:root[data-style="glass"] .bill-menu button:hover {
   background: rgb(255 210 63 / 0.35);
 }
 
