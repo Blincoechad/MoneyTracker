@@ -95,6 +95,14 @@
   display: none !important;
 } /* el.hidden = true must always win over display:flex/grid */
 
+/* Keep the page pinned on phones: nothing can push it sideways, and double-taps don't zoom.
+   Sideways swiping still works inside scrollers like the paycheck list. */
+html,
+body {
+  overflow-x: clip;
+  touch-action: manipulation;
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
