@@ -1981,6 +1981,35 @@ document.addEventListener("keydown", (event) => {
   if (open) closeSavingsEditor(open);
 });
 
+// Redraw the bill lists, then put focus back on the matching button.
+// The page must stay put: iPhone Safari scrolls to whatever gets focus, which
+// pushed the open ⋯ menu off screen, so focus moves without scrolling and the
+// scroll position is restored if anything else nudged it.
+function redrawAndFocus(selector) {
+  const { scrollX, scrollY } = window;
+  refresh();
+  if (selector)
+    document.querySelector(selector)?.focus({ preventScroll: true });
+  if (window.scrollX !== scrollX || window.scrollY !== scrollY)
+    window.scrollTo(scrollX, scrollY);
+  revealOpenMenu();
+}
+
+// A menu opened near the bottom of the screen: scroll just enough to show all of it,
+// never so far that its ⋯ button goes under the sticky bar at the top.
+function revealOpenMenu() {
+  if (!openBillMenu) return;
+  const row = document.querySelector(`#${openBillMenu.area} .bill-row.is-open`);
+  const menu = row?.querySelector(".bill-menu");
+  if (!menu) return;
+  const below = menu.getBoundingClientRect().bottom - (window.innerHeight - 12);
+  const room = row.getBoundingClientRect().top - 100;
+  const by = Math.min(below, room);
+  if (by <= 0) return;
+  const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollBy({ top: by, behavior: smooth ? "smooth" : "auto" });
+}
+
 // A bill's ⋯ menu: open/close it, or move the bill off (or back onto) this paycheck.
 // The lists redraw on every change, so focus is put back on the matching button.
 document.addEventListener("click", (event) => {
@@ -1997,7 +2026,7 @@ document.addEventListener("click", (event) => {
     !event.target.closest(".bill-row.is-open")
   ) {
     openBillMenu = null;
-    refresh();
+    redrawAndFocus(null);
     return;
   }
   if (!menuButton && !otherButton && !moveOpenButton && !moveButton) return;
@@ -2007,20 +2036,14 @@ document.addEventListener("click", (event) => {
   if (moveOpenButton) {
     const key = moveOpenButton.dataset.moveOpen;
     openBillMenu = { area, key, moving: !openBillMenu?.moving };
-    refresh();
-    document
-      .querySelector(`${scope} [data-move-open="${CSS.escape(key)}"]`)
-      ?.focus();
+    redrawAndFocus(`${scope} [data-move-open="${CSS.escape(key)}"]`);
     return;
   }
   if (moveButton) {
     const key = moveBill(moveButton.dataset.moveTo, moveButton.dataset.week);
     openBillMenu = null;
-    refresh();
     // Off the This week card it's gone; the paycheck card it moved to still has it.
-    document
-      .querySelector(`${scope} [data-bill-menu="${CSS.escape(key)}"]`)
-      ?.focus();
+    redrawAndFocus(`${scope} [data-bill-menu="${CSS.escape(key)}"]`);
     return;
   }
 
@@ -2028,12 +2051,9 @@ document.addEventListener("click", (event) => {
     const key = menuButton.dataset.billMenu;
     const isOpen = openBillMenu?.area === area && openBillMenu.key === key;
     openBillMenu = isOpen ? null : { area, key };
-    refresh();
-    document
-      .querySelector(
-        `${scope} [${isOpen ? "data-bill-menu" : "data-other-source"}="${CSS.escape(key)}"]`,
-      )
-      ?.focus();
+    redrawAndFocus(
+      `${scope} [${isOpen ? "data-bill-menu" : "data-other-source"}="${CSS.escape(key)}"]`,
+    );
     return;
   }
   const state = activeState();
@@ -2042,10 +2062,7 @@ document.addEventListener("click", (event) => {
   else state.otherSource[key] = true;
   if (!scenario) baseline.isExample = false;
   openBillMenu = null;
-  refresh();
-  document
-    .querySelector(`${scope} [data-bill-menu="${CSS.escape(key)}"]`)
-    ?.focus();
+  redrawAndFocus(`${scope} [data-bill-menu="${CSS.escape(key)}"]`);
 });
 
 // Move a once-a-month bill to another week this month ("" = back to its due-date week).
@@ -2073,10 +2090,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || !openBillMenu) return;
   const { area, key } = openBillMenu;
   openBillMenu = null;
-  refresh();
-  document
-    .querySelector(`#${area} [data-bill-menu="${CSS.escape(key)}"]`)
-    ?.focus();
+  redrawAndFocus(`#${area} [data-bill-menu="${CSS.escape(key)}"]`);
 });
 
 // Tapping a bill on a paycheck marks it paid (or unpaid). The list redraws, so focus goes back to it.
@@ -2089,10 +2103,7 @@ document.addEventListener("click", (event) => {
   else state.paid[key] = true;
   if (!scenario) baseline.isExample = false;
   const area = button.closest("#thisWeek") ? "#thisWeek" : "#weekList";
-  refresh();
-  document
-    .querySelector(`${area} [data-paid-key="${CSS.escape(key)}"]`)
-    ?.focus();
+  redrawAndFocus(`${area} [data-paid-key="${CSS.escape(key)}"]`);
 });
 
 $("addExpense").addEventListener("click", () => {
