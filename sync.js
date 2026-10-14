@@ -127,6 +127,17 @@ function start() {
       location.reload(); // start fresh, signed out
       return;
     }
+    // An iPhone Home Screen app can't finish Google sign-in: the sign-in window can't
+    // hand the result back to it, so it silently stayed "Not syncing". Say so instead.
+    if (navigator.standalone) {
+      setStatus("Open in Safari to sign in");
+      window.alert(
+        "Signing in doesn't work inside an iPhone Home Screen app.\n\n" +
+          "Open Dough Flow in Safari and sign in there. To fix the icon, delete it, " +
+          "then in Safari tap Share → Add to Home Screen (turn off \"Open as Web App\" if you see it).",
+      );
+      return;
+    }
     try {
       // Always show Google's account list, so you can pick which account instead of reusing the last one.
       const provider = new GoogleAuthProvider();

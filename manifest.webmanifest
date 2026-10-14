@@ -3,7 +3,7 @@
   "short_name": "Dough Flow",
   "start_url": "./",
   "scope": "./",
-  "display": "standalone",
+  "display": "browser",
   "background_color": "#eef2f4",
   "theme_color": "#0e6574",
   "icons": [
