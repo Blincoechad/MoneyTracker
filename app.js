@@ -80,6 +80,7 @@ function createExampleState() {
     actuals: { [firstPayday.key]: "425" },
     paid: {},
     otherSource: {},
+    movedBills: {},
     leftNow: "",
     outsideBalance: "",
     savedBefore: "",
@@ -124,6 +125,7 @@ function createBlankState() {
     actuals: {},
     paid: {}, // "<payday>|<bill id>": true once you've marked it paid
     otherSource: {}, // "<payday>|<bill id>": true when that paycheck isn't paying it (side savings etc.)
+    movedBills: {}, // "<bill id>": "<payday>" a once-a-month bill was moved to, this month only
     leftNow: "", // what you last typed into "Left from this check"; stays until you change it
     outsideBalance: "", // side savings balance; this month's "other source" bills come off it
     savedBefore: "", // savings checked off in all earlier months, added up (plus your edits to the total)
@@ -322,6 +324,10 @@ function loadState() {
     saved.otherSource && typeof saved.otherSource === "object"
       ? saved.otherSource
       : {};
+  state.movedBills =
+    saved.movedBills && typeof saved.movedBills === "object"
+      ? saved.movedBills
+      : {};
   // Older saves kept one amount per payday; carry the most recent one over.
   if (saved.leftNow && typeof saved.leftNow === "object") {
     state.leftNow =
@@ -348,6 +354,7 @@ function closeMonthIfNeeded(state) {
   state.actuals = {};
   state.paid = {};
   state.otherSource = {};
+  state.movedBills = {}; // moved bills go back to their due-date week
   state.actualsMonth = currentMonthKey();
   return true;
 }
@@ -837,11 +844,39 @@ function dueText(item) {
 }
 
 // Which bill's ⋯ menu is open: the same bill shows in the This week card and on its paycheck card.
-let openBillMenu = null; // { area: "thisWeek" | "weekList", key }
+// moving: the "Move to another week" list inside it is showing.
+let openBillMenu = null; // { area: "thisWeek" | "weekList", key, moving }
+
+// The ⋯ menu's "Move to another week" list: this week and later ones (not the one it's on),
+// plus a way back to its due-date week once it's been moved.
+function moveOptionsHtml(item, plan, r, safeKey) {
+  const current = latestPaydayWeek(r.weeks)?.index ?? 0;
+  const month = MONTH_NAMES_SHORT[new Date().getMonth()];
+  const options = r.weeks
+    .filter((week) => week.index >= current && week.key !== plan.key)
+    .map(
+      (week) =>
+        `<button type="button" role="menuitem" class="bill-menu-sub" data-move-to="${safeKey}" data-week="${escapeHtml(week.key)}">${weekLabel(week, new Date().getMonth(), r.payFrequency).name} · ${month} ${week.startDay}</button>`,
+    );
+  if (item.moved)
+    options.push(
+      `<button type="button" role="menuitem" class="bill-menu-sub" data-move-to="${safeKey}" data-week="">Back to its due-date week</button>`,
+    );
+  return options.length
+    ? options.join("")
+    : `<p class="bill-menu-note">No later weeks left this month.</p>`;
+}
+
+// What a moved bill says under its name.
+function movedText(item) {
+  if (item.afterDue) return `${dueText(item)} · moved, after due date`;
+  return `${dueText(item)} · moved here`;
+}
 
 // The checklist of bills one paycheck covers. Tapping one marks it paid;
-// its ⋯ menu moves it off this paycheck ("pay from other source") or back.
-function billListHtml(plan, state, area) {
+// its ⋯ menu moves it off this paycheck ("pay from other source"), or
+// for a once-a-month bill, to another week this month.
+function billListHtml(plan, state, area, r) {
   if (plan.items.length === 0)
     return `<p class="bill-empty">Nothing due from this paycheck.</p>`;
   return plan.items
@@ -850,6 +885,7 @@ function billListHtml(plan, state, area) {
       const safeKey = escapeHtml(key);
       const paid = Boolean(state.paid[key]);
       const menuOpen = openBillMenu?.area === area && openBillMenu.key === key;
+      const moving = menuOpen && openBillMenu.moving;
       const classes = [
         "bill-check",
         paid && "is-paid",
@@ -863,7 +899,12 @@ function billListHtml(plan, state, area) {
         : `
           <button type="button" class="bill-more" data-bill-menu="${safeKey}" aria-label="More options for ${escapeHtml(item.name)}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋯</button>
           <div class="bill-menu" role="menu"${menuOpen ? "" : " hidden"}>
-            <button type="button" role="menuitem" data-other-source="${safeKey}">${item.fromOther ? "Pay from this paycheck" : "Pay from other source"}</button>
+            <button type="button" role="menuitem" data-other-source="${safeKey}">${item.fromOther ? "Pay from this paycheck" : "Pay from other source"}</button>${
+              item.movable
+                ? `
+            <button type="button" role="menuitem" data-move-open="${safeKey}" aria-expanded="${moving}">Move to another week</button>${moving ? moveOptionsHtml(item, plan, r, safeKey) : ""}`
+                : ""
+            }
           </div>`;
       return `
         <div class="bill-row${menuOpen ? " is-open" : ""}">
@@ -871,7 +912,7 @@ function billListHtml(plan, state, area) {
             <span class="bill-box" aria-hidden="true">${paid ? CHECK_ICON : ""}</span>
             <span class="bill-text">
               <span class="bill-name">${escapeHtml(item.name)}</span>
-              <span class="bill-due${item.beforePayday && !item.fromOther ? " is-late" : ""}">${item.fromOther ? "Paid from other source" : dueText(item)}</span>
+              <span class="bill-due${(item.beforePayday || item.afterDue) && !item.fromOther ? " is-late" : ""}">${item.fromOther ? "Paid from other source" : item.moved ? movedText(item) : dueText(item)}</span>
             </span>
             <span class="bill-amount">${money(item.amount)}</span>
           </button>${menu}
@@ -921,6 +962,7 @@ function renderWeeks(r, state) {
       plan,
       state,
       "weekList",
+      r,
     );
     card.querySelector('[data-role="totals"]').innerHTML = `
       ${plan.fromOther > 0 ? `<div class="is-other"><dt>From other source</dt><dd>${money(plan.fromOther)}</dd></div>` : ""}
@@ -1064,7 +1106,7 @@ function renderThisWeek(r, state) {
   const paidCount = plan.items.filter(
     (item) => state.paid[`${plan.key}|${item.id}`],
   ).length;
-  $("thisWeekBills").innerHTML = billListHtml(plan, state, "thisWeek");
+  $("thisWeekBills").innerHTML = billListHtml(plan, state, "thisWeek", r);
   $("thisWeekProgress").textContent = plan.items.length
     ? `${paidCount} of ${plan.items.length} done`
     : "";
@@ -1944,9 +1986,13 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   const menuButton = event.target.closest("[data-bill-menu]");
   const otherButton = event.target.closest("[data-other-source]");
+  const moveOpenButton = event.target.closest("[data-move-open]");
+  const moveButton = event.target.closest("[data-move-to]");
   if (
     !menuButton &&
     !otherButton &&
+    !moveOpenButton &&
+    !moveButton &&
     openBillMenu &&
     !event.target.closest(".bill-row.is-open")
   ) {
@@ -1954,9 +2000,29 @@ document.addEventListener("click", (event) => {
     refresh();
     return;
   }
-  if (!menuButton && !otherButton) return;
+  if (!menuButton && !otherButton && !moveOpenButton && !moveButton) return;
   const area = event.target.closest("#thisWeek") ? "thisWeek" : "weekList";
   const scope = `#${area}`;
+
+  if (moveOpenButton) {
+    const key = moveOpenButton.dataset.moveOpen;
+    openBillMenu = { area, key, moving: !openBillMenu?.moving };
+    refresh();
+    document
+      .querySelector(`${scope} [data-move-open="${CSS.escape(key)}"]`)
+      ?.focus();
+    return;
+  }
+  if (moveButton) {
+    const key = moveBill(moveButton.dataset.moveTo, moveButton.dataset.week);
+    openBillMenu = null;
+    refresh();
+    // Off the This week card it's gone; the paycheck card it moved to still has it.
+    document
+      .querySelector(`${scope} [data-bill-menu="${CSS.escape(key)}"]`)
+      ?.focus();
+    return;
+  }
 
   if (menuButton) {
     const key = menuButton.dataset.billMenu;
@@ -1981,6 +2047,27 @@ document.addEventListener("click", (event) => {
     .querySelector(`${scope} [data-bill-menu="${CSS.escape(key)}"]`)
     ?.focus();
 });
+
+// Move a once-a-month bill to another week this month ("" = back to its due-date week).
+// Its checkmarks follow it, since they're saved under the payday it's listed on.
+function moveBill(key, toPayday) {
+  const state = activeState();
+  const id = key.slice(key.indexOf("|") + 1);
+  if (toPayday) state.movedBills[id] = toPayday;
+  else delete state.movedBills[id];
+  const plan = calculate(state).paychecks.find((p) =>
+    p.items.some((item) => item.id === id),
+  );
+  const newKey = plan ? `${plan.key}|${id}` : key;
+  if (newKey !== key) {
+    for (const flags of [state.paid, state.otherSource]) {
+      if (flags[key]) flags[newKey] = true;
+      delete flags[key];
+    }
+  }
+  if (!scenario) baseline.isExample = false;
+  return newKey;
+}
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || !openBillMenu) return;
@@ -2030,6 +2117,7 @@ $("expenseList").addEventListener("click", (event) => {
   state.expenses = state.expenses.filter(
     (expense) => expense.id !== button.dataset.removeExpense,
   );
+  delete state.movedBills[button.dataset.removeExpense];
   if (!scenario) baseline.isExample = false;
   renderExpenseRows();
   refresh();

@@ -438,12 +438,23 @@ function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
       });
     });
 
+  // A once-a-month bill can be moved to another week this month (⋯ → Move to another week).
+  // movedBills maps the bill's id to that week's payday; a payday that no longer exists is ignored.
+  const movedBills = state.movedBills ?? {};
+  const movedTo = (expense) => {
+    const index = weeks.findIndex((week) => week.key === movedBills[expense.id]);
+    return index === -1 ? null : index;
+  };
+
   for (const expense of state.expenses) {
     const amount = moneyOrZero(expense.amount);
     const base = {
       id: expense.id,
       name: expense.name.trim() || "Unnamed expense",
     };
+    const once =
+      expense.frequency === "monthly" || expense.frequency === "yearly";
+    const moved = once ? movedTo(expense) : null;
 
     if (expense.frequency === "weekly") {
       // Paid every 2 weeks, a weekly bill shows once per week under each paycheck.
@@ -453,7 +464,13 @@ function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
         when: state.payFrequency === "biweekly" ? "weekly" : "every",
       });
     } else if (expense.frequency === "yearly") {
-      plans[0].push({ ...base, amount: amount / 12, when: "yearly" });
+      plans[moved ?? 0].push({
+        ...base,
+        amount: amount / 12,
+        when: "yearly",
+        movable: true,
+        moved: (moved ?? 0) !== 0,
+      });
     } else if (expense.frequency === "biweekly" && !parseIsoDate(expense.due)) {
       if (state.payFrequency === "biweekly")
         everyPaycheck({ ...base, amount, when: "every" });
@@ -461,19 +478,30 @@ function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
     } else {
       const days = dueDaysInMonth(expense, year, monthIndex);
       if (expense.frequency === "monthly" && days.length === 0) {
-        plans[0].push({ ...base, amount, when: "unset" });
+        plans[moved ?? 0].push({
+          ...base,
+          amount,
+          when: "unset",
+          movable: true,
+          moved: (moved ?? 0) !== 0,
+        });
       }
       for (const day of days) {
         const index = weeks.reduce(
           (found, week, i) => (week.startDay <= day ? i : found),
           -1,
         );
-        plans[Math.max(index, 0)].push({
+        const target = moved ?? Math.max(index, 0);
+        plans[target].push({
           ...base,
           amount,
           when: "due",
           dueDay: day,
-          beforePayday: index === -1,
+          beforePayday: target === 0 && index === -1,
+          movable: once,
+          moved: target !== Math.max(index, 0),
+          // Moved to a payday after its due day: it'll be paid late.
+          afterDue: moved !== null && weeks[target].startDay > day,
         });
       }
     }

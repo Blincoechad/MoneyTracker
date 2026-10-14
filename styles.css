@@ -1791,6 +1791,21 @@ input[aria-invalid="true"] {
 .bill-menu button:hover {
   background: var(--surface-2);
 }
+/* "Move to another week": the weeks it can go to, tucked under that item */
+.bill-menu .bill-menu-sub {
+  min-height: 36px;
+  padding-left: 24px;
+  color: var(--muted);
+}
+.bill-menu .bill-menu-sub:hover {
+  color: var(--ink);
+}
+.bill-menu-note {
+  margin: 0;
+  padding: 6px 12px 8px 24px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
 
 /* Paid from another source: still listed, but not taken out of this paycheck */
 .bill-check.is-other {
