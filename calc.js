@@ -269,19 +269,26 @@ function calculateBudget(state, today) {
     (sum, plan) => sum + plan.fromOther,
     0,
   );
-  // Savings actually added: each paycheck's Savings line you've checked off.
+  // PLAN: every paycheck this month minus every bill this month (bills only, no savings).
+  const planRemaining = projectedIncome - monthlyExpenses + paidFromOther;
+
+  // BALANCE: once you type what's in your account for this paycheck, the month is
+  // what you have now + paychecks still coming − bills you haven't paid yet.
+  // That replaces the plan's guess about everything that already happened.
   const paid = state.paid ?? {};
-  const savedThisMonth = paychecks.reduce(
-    (sum, plan) =>
-      sum +
-      plan.items
-        .filter((item) => item.isSavings && paid[`${plan.key}|${item.id}`])
-        .reduce((s, item) => s + item.amount, 0),
-    0,
-  );
-  // Bills only: the savings goal is tracked on its own and never pushes the month negative.
-  // Whatever's left after bills is what you have available to save (or spend).
-  const projectedRemaining = projectedIncome - monthlyExpenses + paidFromOther;
+  const latestIndex = latestPaydayIndex(resolvedWeeks, today.getDate());
+  const balance = parseMoney(state.leftNow).value;
+  const balanceIsCurrent =
+    balance !== null &&
+    (latestIndex === -1
+      ? state.leftNowWeek === "before"
+      : state.leftNowWeek === resolvedWeeks[latestIndex].key);
+  const fromBalance = balanceIsCurrent
+    ? monthFromBalance(resolvedWeeks, paychecks, latestIndex, paid, balance)
+    : null;
+
+  const usesBalance = fromBalance !== null;
+  const projectedRemaining = usesBalance ? fromBalance.remaining : planRemaining;
 
   // --- Minimum income and buffer averaged across this month's pay periods ---
   const requiredMonthlyIncome = monthlyExpenses - paidFromOther;
@@ -336,8 +343,13 @@ function calculateBudget(state, today) {
     projectedIncome,
     monthlyExpenses,
     monthlySavings,
+    planRemaining,
     projectedRemaining,
     isPositive: projectedRemaining >= 0,
+    usesBalance,
+    balance: usesBalance ? balance : null,
+    balanceDetail: fromBalance,
+    latestIndex,
 
     requiredMonthlyIncome,
     minimumIncomePerPayPeriod,
@@ -369,7 +381,52 @@ function calculateBudget(state, today) {
     paychecks,
     calendarWeeks,
     paidFromOther,
-    savedThisMonth,
+  };
+}
+
+// Index of the most recent payday on or before today (-1 before this month's first payday).
+function latestPaydayIndex(weeks, todayDay) {
+  let index = -1;
+  weeks.forEach((week, i) => {
+    if (week.startDay <= todayDay) index = i;
+  });
+  return index;
+}
+
+/* ---------------------------------------------------------------------
+   MONTH TOTAL FROM YOUR REAL BALANCE
+   balance = what's in your account right now (typed into "Left from this check").
+   It already includes this paycheck and everything earlier, so those aren't added again.
+     remaining = balance
+               − bills on this paycheck you haven't checked off
+               + each later paycheck
+               − each later paycheck's bills you haven't checked off
+   Before the month's first payday (latestIndex -1), every paycheck is still to come.
+   Bills marked "pay from other source" don't come out of this account.
+   --------------------------------------------------------------------- */
+function monthFromBalance(weeks, paychecks, latestIndex, paid, balance) {
+  const unpaid = (plan) =>
+    plan.items.reduce(
+      (sum, item) =>
+        sum +
+        (item.fromOther || paid[`${plan.key}|${item.id}`] ? 0 : item.amount),
+      0,
+    );
+  const dueNow = latestIndex >= 0 ? unpaid(paychecks[latestIndex]) : 0;
+  let incomeToCome = 0;
+  let billsToCome = 0;
+  for (let i = latestIndex + 1; i < paychecks.length; i++) {
+    incomeToCome += weeks[i].amountUsed;
+    billsToCome += unpaid(paychecks[i]);
+  }
+  const round = (n) => Math.round(n * 100) / 100;
+  return {
+    balance: round(balance),
+    dueNow: round(dueNow),
+    incomeToCome: round(incomeToCome),
+    billsToCome: round(billsToCome),
+    paychecksToCome: Math.max(0, paychecks.length - latestIndex - 1),
+    remaining: round(balance - dueNow + incomeToCome - billsToCome),
   };
 }
 
@@ -381,13 +438,11 @@ function calculateBudget(state, today) {
      monthly, no due day   → the first paycheck
      every 2 weeks, no date→ half on every paycheck
      yearly                → 1/12 set aside from the first paycheck
-     savings               → every calendar week (weekly) or the first (monthly)
    A bill due before this month's first payday is still listed on the
    first paycheck, flagged so you know it's already due.
    A bill you mark "pay from other source" for a paycheck stays listed
    but doesn't come out of that paycheck (it's counted in fromOther).
-   The Savings line stays on the list so you can check it off, but it
-   doesn't count in a paycheck's "left" (the month is bills only).
+   Savings isn't a bill, so it never appears here.
    Everything adds up to the same totals as the summary, so the last
    paycheck's running total equals "projected remaining".
    --------------------------------------------------------------------- */
@@ -509,40 +564,21 @@ function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
     }
   }
 
-  const savings = moneyOrZero(state.savings.amount);
-  if (savings > 0) {
-    const item = {
-      id: "savings",
-      name: "Savings",
-      amount: savings,
-      isSavings: true,
-    };
-    if (state.savings.frequency === "weekly")
-      everyPaycheck({ ...item, when: "every" });
-    else plans[0].push({ ...item, when: "monthly" });
-  }
+  // Savings isn't a bill, so it isn't listed on any paycheck (you track it on the Savings card).
 
-  // Dated bills first (by due day), then every-paycheck ones, savings last.
+  // Dated bills first (by due day), then every-paycheck ones.
   const order = (item) =>
-    item.isSavings
-      ? 100
-      : item.when === "due"
-        ? item.dueDay
-        : item.when === "unset"
-          ? 0
-          : 50;
+    item.when === "due" ? item.dueDay : item.when === "unset" ? 0 : 50;
   const otherSource = state.otherSource ?? {};
   let running = 0;
   return plans.map((items, i) => {
     items.sort((a, b) => order(a) - order(b));
     const key = weeks[i].key;
     items.forEach((item) => {
-      item.fromOther =
-        !item.isSavings && Boolean(otherSource[`${key}|${item.id}`]);
+      item.fromOther = Boolean(otherSource[`${key}|${item.id}`]);
     });
     const out = items.reduce(
-      (sum, item) =>
-        sum + (item.fromOther || item.isSavings ? 0 : item.amount),
+      (sum, item) => sum + (item.fromOther ? 0 : item.amount),
       0,
     );
     const fromOther = items.reduce(
@@ -562,31 +598,20 @@ function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
      - this paycheck's bills you haven't checked off yet
      - the deepest hole later paychecks fall into (a rent week that
        costs more than that week's pay has to be covered from now)
-   Savings isn't held back (the month is bills only), so "can spend" is
-   also what you're free to save.
    haveText is what you typed into "Left from this check"; when blank,
-   it's the paycheck minus everything already checked off (savings you
-   checked off has left your account, so it counts there).
+   it's the paycheck minus the bills already checked off.
    --------------------------------------------------------------------- */
 function spendingRoom(weeks, paychecks, weekIndex, paid, haveText) {
-  const isPaid = (plan, item) => Boolean(paid[`${plan.key}|${item.id}`]);
   const unpaid = (plan) =>
     plan.items.reduce(
       (sum, item) =>
         sum +
-        (item.fromOther || item.isSavings || isPaid(plan, item)
-          ? 0
-          : item.amount),
+        (item.fromOther || paid[`${plan.key}|${item.id}`] ? 0 : item.amount),
       0,
     );
 
-  const plan = paychecks[weekIndex];
-  const dueNow = unpaid(plan);
-  const paidNow = plan.items.reduce(
-    (sum, item) =>
-      sum + (!item.fromOther && isPaid(plan, item) ? item.amount : 0),
-    0,
-  );
+  const dueNow = unpaid(paychecks[weekIndex]);
+  const paidNow = paychecks[weekIndex].out - dueNow;
   const have =
     parseMoney(haveText).value ?? weeks[weekIndex].amountUsed - paidNow;
 
@@ -626,5 +651,7 @@ if (typeof module !== "undefined") {
     planPaychecks,
     dueDaysInMonth,
     spendingRoom,
+    monthFromBalance,
+    latestPaydayIndex,
   };
 }

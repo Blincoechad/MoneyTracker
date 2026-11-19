@@ -82,6 +82,7 @@ function createExampleState() {
     otherSource: {},
     movedBills: {},
     leftNow: "",
+    leftNowWeek: "",
     outsideBalance: "",
     savedBefore: "",
     savingsAdjust: 0,
@@ -127,9 +128,10 @@ function createBlankState() {
     otherSource: {}, // "<payday>|<bill id>": true when that paycheck isn't paying it (side savings etc.)
     movedBills: {}, // "<bill id>": "<payday>" a once-a-month bill was moved to, this month only
     leftNow: "", // what you last typed into "Left from this check"; stays until you change it
+    leftNowWeek: "", // the payday that balance was typed for ("before" = before this month's first payday)
     outsideBalance: "", // side savings balance; this month's "other source" bills come off it
-    savedBefore: "", // savings checked off in all earlier months, added up (plus your edits to the total)
-    savingsAdjust: 0, // money you added (+) or took out (−) of this month's savings by hand
+    savedBefore: "", // savings from all earlier months, added up (plus your edits to the total)
+    savingsAdjust: 0, // this month's savings; you set it on the Savings card (⋯)
     expenses: [],
     savings: { amount: "", frequency: "monthly" },
   };
@@ -336,6 +338,9 @@ function loadState() {
     state.leftNow = typeof saved.leftNow === "string" ? saved.leftNow : "";
   }
   migrateAverageWeeks(state);
+  migrateCheckedSavings(state);
+  if (state.leftNow && typeof saved.leftNowWeek !== "string")
+    state.leftNowWeek = balanceWeekKey(state); // a balance typed before this was tracked counts for the current paycheck
   closeMonthIfNeeded(state);
   return state;
 }
@@ -345,9 +350,12 @@ function loadState() {
 // Returns true when a month was closed.
 function closeMonthIfNeeded(state) {
   if (state.actualsMonth === currentMonthKey()) return false;
-  settleMonth(state);
+  const savedLastMonth = settleMonth(state);
   if (!state.isExample) {
-    closedMonth = { key: state.actualsMonth, state: structuredClone(state) };
+    closedMonth = {
+      key: state.actualsMonth,
+      state: { ...structuredClone(state), savingsAddedThisMonth: savedLastMonth },
+    };
     monthNoticeText =
       "A new month started. Last month's pay periods were saved to Monthly history and cleared. Your income, bills, and savings are unchanged.";
   }
@@ -360,22 +368,47 @@ function closeMonthIfNeeded(state) {
 }
 
 // When a month closes, carry what it did forward before its checkmarks are cleared:
-// bills paid from outside savings come off that balance, and the savings you
-// checked off are added to your all-time total.
+// bills paid from outside savings come off that balance, and this month's savings
+// (what you set on the Savings card) is added to your all-time total.
+// Returns what was saved this month, for the month's report.
 function settleMonth(state) {
   const [year, month] = state.actualsMonth.split("-").map(Number);
-  const { paidFromOther, savedThisMonth } = calculateBudget(
-    state,
-    new Date(year, month, 0),
-  );
+  const { paidFromOther } = calculateBudget(state, new Date(year, month, 0));
   const round = (n) => String(Math.round(n * 100) / 100);
   const balance = parseMoney(state.outsideBalance).value;
   if (balance !== null && paidFromOther > 0)
     state.outsideBalance = round(balance - paidFromOther);
-  const addedThisMonth = savedThisMonth + amountOrZero(state.savingsAdjust);
+  const addedThisMonth = amountOrZero(state.savingsAdjust);
   if (addedThisMonth !== 0)
     state.savedBefore = round(amountOrZero(state.savedBefore) + addedThisMonth);
   state.savingsAdjust = 0;
+  return addedThisMonth;
+}
+
+// Savings used to be a line on each paycheck that you checked off.
+// Fold any of those checkmarks into this month's savings number so nothing you saved disappears.
+function migrateCheckedSavings(state) {
+  const keys = Object.keys(state.paid).filter((key) => key.endsWith("|savings"));
+  if (keys.length === 0) return;
+  const each = parseMoney(state.savings.amount).value ?? 0;
+  const checked = keys.filter((key) => state.paid[key]).length * each;
+  state.savingsAdjust =
+    Math.round((amountOrZero(state.savingsAdjust) + checked) * 100) / 100;
+  keys.forEach((key) => delete state.paid[key]);
+}
+
+// Which paycheck a balance typed today belongs to: the latest payday so far, or "before".
+function balanceWeekKey(state) {
+  const today = new Date();
+  const weeks = buildWeeks(
+    today.getFullYear(),
+    today.getMonth(),
+    Number(state.paydayWeekday),
+    state.payFrequency,
+    state.paydayAnchor,
+  );
+  const index = latestPaydayIndex(weeks, today.getDate());
+  return index === -1 ? "before" : weeks[index].key;
 }
 
 // Like moneyOrZero, but allows negatives (a total can go below zero after taking money out).
@@ -698,6 +731,7 @@ function renderHero(r, base) {
     }
     $("heroMessage").textContent = message;
   }
+  $("heroMessage").textContent = `${$("heroMessage").textContent} ${balanceNote(r)}`.trim();
 
   const delta = $("heroDelta");
   delta.hidden = !base;
@@ -705,6 +739,23 @@ function renderHero(r, base) {
     const change = r.projectedRemaining - base.projectedRemaining;
     delta.textContent = `Your saved budget: ${signedMoney(base.projectedRemaining)}  ·  This what-if: ${signedMoney(change)} difference`;
   }
+}
+
+// Says where the month total comes from: your typed balance, or the plan.
+function balanceNote(r) {
+  const state = activeState();
+  if (r.usesBalance) {
+    const d = r.balanceDetail;
+    const checks = d.paychecksToCome;
+    const coming =
+      checks > 0
+        ? ` + ${money(d.incomeToCome)} from ${checks} more paycheck${checks === 1 ? "" : "s"}`
+        : "";
+    return `Counted from the ${money(d.balance)} you have now${coming} − ${money(d.dueNow + d.billsToCome)} in bills not checked off yet.`;
+  }
+  if (parseMoney(state.leftNow).value !== null)
+    return `Your "Left from this check" amount is from an earlier paycheck, so this uses your planned pay. Update it to count what you have now.`;
+  return "";
 }
 
 // In What-If mode, show "was $X" under any number that changed.
@@ -795,20 +846,15 @@ function renderKpis(r, base) {
     b.monthlyExpenses,
     r.monthlyExpenses,
   );
-  // Savings tile: checked-off savings plus any hand edits (⋯), then the all-time total.
-  const adjust = amountOrZero(activeState().savingsAdjust);
-  const addedThisMonth = r.savedThisMonth + adjust;
+  // Savings tile: only the numbers you set yourself with ⋯ (nothing is added automatically).
+  const addedThisMonth = amountOrZero(activeState().savingsAdjust);
   const totalSaved = amountOrZero(activeState().savedBefore) + addedThisMonth;
-  const planned =
-    r.monthlySavings > 0
-      ? `of ${money(r.monthlySavings)} planned`
-      : "No savings goal set";
   setKpi(
     "kpiSavings",
     money(addedThisMonth),
-    clean(adjust) === 0
-      ? planned
-      : `${planned} · ${signedMoney(adjust)} by hand`,
+    r.monthlySavings > 0
+      ? `of ${money(r.monthlySavings)} planned`
+      : "No savings goal set",
   );
   $("kpiSavings").classList.toggle("text-bad", addedThisMonth < -0.005);
   $("kpiSavedTotal").textContent = money(totalSaved);
@@ -889,14 +935,11 @@ function billListHtml(plan, state, area, r) {
       const classes = [
         "bill-check",
         paid && "is-paid",
-        item.isSavings && "is-savings",
         item.fromOther && "is-other",
       ]
         .filter(Boolean)
         .join(" ");
-      const menu = item.isSavings
-        ? ""
-        : `
+      const menu = `
           <button type="button" class="bill-more" data-bill-menu="${safeKey}" aria-label="More options for ${escapeHtml(item.name)}" aria-haspopup="menu" aria-expanded="${menuOpen}">⋯</button>
           <div class="bill-menu" role="menu"${menuOpen ? "" : " hidden"}>
             <button type="button" role="menuitem" data-other-source="${safeKey}">${item.fromOther ? "Pay from this paycheck" : "Pay from other source"}</button>${
@@ -1443,6 +1486,9 @@ function buildMonthReport(monthKey, state) {
   const lastDay = new Date(year, month, 0); // last day of that month
   // Calculate as if the month is over, so every week counts as finished.
   const r = calculateBudget(state, lastDay);
+  const savedThisMonth = amountOrZero(
+    state.savingsAddedThisMonth ?? state.savingsAdjust,
+  );
 
   const enteredWeeks = r.weeks.filter((week) => week.status === "actual");
   const totalEntered = enteredWeeks.reduce((sum, week) => sum + week.actual, 0);
@@ -1479,8 +1525,8 @@ function buildMonthReport(monthKey, state) {
       ? [`  from other source: ${money(r.paidFromOther)}  (not from pay)`]
       : []),
     `Savings planned:     ${money(r.monthlySavings)}`,
-    `Savings added:       ${money(r.savedThisMonth)}  (checked off)`,
-    `Remaining:           ${signedMoney(r.projectedRemaining)}`,
+    `Savings added:       ${money(savedThisMonth)}`,
+    `Remaining:           ${signedMoney(r.planRemaining)}  (pay − bills)`,
     "",
   );
   return {
@@ -1511,8 +1557,8 @@ function buildMonthReport(monthKey, state) {
       billsTotal: r.monthlyExpenses,
       paidFromOther: r.paidFromOther,
       savingsPlanned: r.monthlySavings,
-      savingsAdded: r.savedThisMonth,
-      remaining: r.projectedRemaining,
+      savingsAdded: savedThisMonth,
+      remaining: r.planRemaining,
     },
   };
 }
@@ -1815,6 +1861,7 @@ function handleChange(event) {
     structureChanged = true;
   } else if (el.id === "leftNow") {
     state.leftNow = el.value.trim() === "" ? "" : el.value;
+    state.leftNowWeek = state.leftNow ? balanceWeekKey(state) : "";
     validateAmount(el);
   } else if (el.dataset.weekKey) {
     const text = el.value.trim();
@@ -1934,17 +1981,14 @@ document.addEventListener("submit", (event) => {
   const part = form.dataset.savingsForm;
   const mode = form.dataset.mode;
   const round = (n) => Math.round(n * 100) / 100;
-  const checked = calculate(state).savedThisMonth;
-  const thisMonth = checked + amountOrZero(state.savingsAdjust);
+  const thisMonth = amountOrZero(state.savingsAdjust);
   if (part === "month") {
-    // Kept apart from the checkmarks, so checking a week's Savings still adds $50 on top.
-    const adjust = amountOrZero(state.savingsAdjust);
     state.savingsAdjust = round(
       mode === "add"
-        ? adjust + value
+        ? thisMonth + value
         : mode === "remove"
-          ? adjust - value
-          : value - checked,
+          ? thisMonth - value
+          : value,
     );
   } else {
     // The total is earlier months (savedBefore) plus this month, so edits land in savedBefore.
