@@ -425,40 +425,6 @@
       <div class="layout">
         <!-- ===================== LEFT: what it means, and your settings ===================== -->
         <div class="column">
-          <section class="panel" aria-labelledby="needHeading">
-            <h2 id="needHeading">What you need each week</h2>
-            <dl class="trio">
-              <div>
-                <dt>To break even</dt>
-                <dd id="needBreakEven">$0.00</dd>
-              </div>
-              <div>
-                <dt>To stay on plan</dt>
-                <dd id="needOnPlan">$0.00</dd>
-              </div>
-              <div>
-                <dt id="needUsualLabel">Your usual week</dt>
-                <dd id="needUsual">$0.00</dd>
-              </div>
-            </dl>
-            <p class="hint" id="needWeeksLeft"></p>
-            <div class="meter" id="needMeter" aria-hidden="true">
-              <div class="meter-fill" id="needMeterFill"></div>
-              <div class="meter-marker" id="needMeterMarker">
-                <span>Break even</span>
-              </div>
-            </div>
-            <div id="needMessage"></div>
-            <details class="explain">
-              <summary>How this is calculated</summary>
-              <div>
-                <dl id="recoveryFacts" class="facts"></dl>
-                <div id="needExplain"></div>
-                <div id="minimumExplain"></div>
-              </div>
-            </details>
-          </section>
-
           <section class="panel settings" aria-labelledby="settingsHeading">
             <details id="settingsDetails">
               <summary class="settings-summary">
@@ -717,8 +683,8 @@
               every blank pay period.
             </li>
             <li>
-              "What you need" only counts pay periods still ahead of you. Past
-              periods left blank are assumed to have paid your usual amount.
+              Past pay periods left blank are assumed to have paid your usual
+              amount.
             </li>
             <li>
               The month counts bills only; savings never makes it negative.

@@ -517,12 +517,6 @@ function renderPayFrequencyFields(state) {
   $("thisWeekHeading").textContent = biweekly
     ? "How much did you get paid?"
     : "How much did you make this week?";
-  $("needHeading").textContent = biweekly
-    ? "What you need each paycheck"
-    : "What you need each week";
-  $("needUsualLabel").textContent = biweekly
-    ? "Your usual paycheck"
-    : "Your usual week";
   $("stickyMinimumLabel").textContent =
     biweekly ? "Break even / check" : "Break even / wk";
   $("breakdownPeriodHeading").textContent =
@@ -697,7 +691,6 @@ function renderResults(r, base) {
   renderThisWeek(r, state);
   renderWeeks(r, state);
   renderExpenseMonthly(r);
-  renderNeeds(r);
   renderSettingsSummary(r, state);
   renderOutsideSavings(r, state);
   renderFlow(r);
@@ -1145,95 +1138,6 @@ function renderThisWeek(r, state) {
       : `${money(week.amountUsed)} − ${money(plan.out)} = <strong class="${plan.left < -0.005 ? "text-bad" : "text-good"}">${signedMoney(plan.left)}</strong> ${plan.left < -0.005 ? "short" : laterShort ? "left" : "to spend"} until ${shortDate(nextDate)}${plan.fromOther > 0 ? ` <span class="hint">(${money(plan.fromOther)} paid from other source)</span>` : ""}`;
 }
 
-function renderNeeds(r) {
-  const unit = r.payFrequency === "biweekly" ? "paycheck" : "week";
-  const shortUnit = r.payFrequency === "biweekly" ? "check" : "wk";
-  const weekWord = (n) => `${unit}${n === 1 ? "" : "s"}`;
-  const perPeriod = (amount) =>
-    amount === null
-      ? "—"
-      : `${money(Math.max(0, amount))}<small>/${shortUnit}</small>`;
-  const breakEven = r.breakEvenPerOpenWeek;
-
-  $("needBreakEven").innerHTML = perPeriod(breakEven);
-  $("needBreakEven").className =
-    breakEven !== null && breakEven > r.expectedPaycheck + 0.005
-      ? "text-bad"
-      : "";
-  $("needOnPlan").innerHTML = perPeriod(r.onPlanPerOpenWeek);
-  $("needUsual").innerHTML = perPeriod(
-    r.payFrequency === "biweekly" ? r.expectedPaycheck : r.expectedWeekly,
-  );
-  $("needWeeksLeft").textContent =
-    r.openWeekCount > 0
-      ? `For the ${r.openWeekCount} remaining ${weekWord(r.openWeekCount)} this month.`
-      : `No ${unit}s left this month.`;
-
-  // Meter: your usual pay amount, with a line where break-even sits.
-  $("needMeter").hidden = breakEven === null;
-  if (breakEven !== null) {
-    const usual = r.payFrequency === "biweekly" ? r.expectedPaycheck : r.expectedWeekly;
-    const scale = Math.max(usual, breakEven, 1) * 1.15;
-    $("needMeterFill").style.width = `${(usual / scale) * 100}%`;
-    $("needMeterFill").classList.toggle(
-      "is-bad",
-      breakEven > usual + 0.005,
-    );
-    $("needMeterMarker").style.left =
-      `calc(${(breakEven / scale) * 100}% - 1px)`;
-  }
-
-  // One plain sentence about where you stand.
-  let tone = "";
-  let message;
-  if (r.openWeekCount === 0) {
-    tone = r.isPositive ? "is-good" : "is-bad";
-    message = `Every ${unit} this month is done or filled in. The month finishes at <strong>${signedMoney(r.projectedRemaining)}</strong>.`;
-  } else if (clean(breakEven) === 0) {
-    tone = "is-good";
-    message =
-      "Pay you've already received covers this month's bills and savings. Anything from here is extra.";
-  } else if (breakEven > r.expectedPaycheck + 0.005) {
-    tone = "is-bad";
-    message = `Your usual ${unit} isn't enough this month. You need about <strong>${money(breakEven - r.expectedPaycheck)} more per ${unit}</strong> to avoid finishing negative.`;
-  } else if (r.shortfallVsPlan > 0.005) {
-    message = `You're <strong>${money(r.shortfallVsPlan)} behind plan</strong>, but your usual ${unit} still covers the ${money(breakEven)} you need, with ${money(r.expectedPaycheck - breakEven)} to spare.`;
-  } else if (r.shortfallVsPlan < -0.005) {
-    tone = "is-good";
-    message = `You're <strong>${money(-r.shortfallVsPlan)} ahead of plan</strong>. Your usual ${unit} covers the ${money(breakEven)} you need, with ${money(r.expectedPaycheck - breakEven)} to spare.`;
-  } else {
-    tone = "is-good";
-    message = `You're on plan. Your usual ${unit} covers the ${money(breakEven)} you need, with ${money(r.expectedPaycheck - breakEven)} to spare.`;
-  }
-  $("needMessage").innerHTML = `<p class="callout ${tone}">${message}</p>`;
-
-  const currentText =
-    r.currentWeekIndex >= r.weeks.length
-      ? "Month is over"
-      : `${weekLabel(r.weeks[r.currentWeekIndex], new Date().getMonth(), r.payFrequency).name} of ${r.weeks.length}`;
-  const facts = [
-    [r.payFrequency === "biweekly" ? "Current paycheck" : "Current week", currentText],
-    [
-      "Completed / remaining",
-      `${r.completedWeekCount} done · ${r.openWeekCount} left`,
-    ],
-    ["Income received", money(r.incomeReceived)],
-    ["Expected still to come", money(r.expectedStillToCome)],
-    ["Needed this month", money(r.requiredMonthlyIncome)],
-    ["Still required to reach $0", money(r.stillRequired)],
-  ];
-  $("recoveryFacts").innerHTML = facts
-    .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
-    .join("");
-
-  $("needExplain").innerHTML =
-    r.openWeekCount === 0
-      ? ""
-      : `
-    <p><strong>Break even:</strong> <span class="formula">${money(r.stillRequired)} still required ÷ ${r.openWeekCount} remaining ${weekWord(r.openWeekCount)} = ${money(breakEven)}/${shortUnit}</span></p>
-    <p><strong>Stay on plan:</strong> <span class="formula">${money(r.expectedPaycheck)} usual ${unit} ${r.shortfallVsPlan >= 0 ? "+" : "−"} ${money(Math.abs(r.shortfallVsPlan))} ${r.shortfallVsPlan >= 0 ? "behind" : "ahead"} ÷ ${r.openWeekCount} remaining ${weekWord(r.openWeekCount)} = ${money(r.onPlanPerOpenWeek)}/${shortUnit}</span></p>`;
-}
-
 // Side savings: the balance, minus every bill this month marked "pay from other source".
 function renderOutsideSavings(r, state) {
   const balance = parseMoney(state.outsideBalance).value ?? 0;
@@ -1393,13 +1297,6 @@ function renderExplanations(r, state) {
     <p><strong>Projection:</strong> add up every paycheck, using your actual amount where you entered one and ${weekly} where you didn't.</p>
     <p class="formula">${weekParts.join(" + ") || "$0.00"} = ${money(r.projectedIncome)}</p>
     <p>${r.payFrequency === "biweekly" ? "Paychecks follow the every-2-weeks schedule anchored to your selected payday date. Weekly bills are distributed across the weeks between paychecks." : "Each payday this month is one week, so 5-payday months show more income than 4-payday months. Weekly bills are counted with each weekly payday."} Savings isn't subtracted: the month counts bills only.</p>`;
-
-  const divisor = `÷ ${r.weeks.length} ${r.payFrequency === "biweekly" ? "paychecks" : "weeks"}`;
-  $("minimumExplain").innerHTML = `
-    <p><strong>Average needed per ${period}</strong> (the whole month, not just what's left):</p>
-    <p class="formula">${money(r.monthlyExpenses)} expenses${r.paidFromOther > 0 ? ` − ${money(r.paidFromOther)} from other source` : ""} = ${money(r.requiredMonthlyIncome)} needed per month</p>
-    <p class="formula">${money(r.requiredMonthlyIncome)} ${divisor} = ${money(r.minimumIncomePerPayPeriod)} per ${period}</p>
-    <p>Buffer = usual ${period} − average needed per ${period}: <span class="formula">${weekly} − ${money(r.minimumIncomePerPayPeriod)} = ${signedMoney(r.payPeriodBuffer)}</span></p>`;
 
   const savingsAmount = parseMoney(state.savings.amount).value ?? 0;
   $("savingsExplain").textContent =
