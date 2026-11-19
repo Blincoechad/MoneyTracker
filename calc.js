@@ -272,20 +272,24 @@ function calculateBudget(state, today) {
   // PLAN: every paycheck this month minus every bill this month (bills only, no savings).
   const planRemaining = projectedIncome - monthlyExpenses + paidFromOther;
 
-  // BALANCE: once you type what's in your account for this paycheck, the month is
-  // what you have now + paychecks still coming − bills you haven't paid yet.
-  // That replaces the plan's guess about everything that already happened.
+  // OWED: every bill this month you haven't checked off. Goes down with each checkmark.
   const paid = state.paid ?? {};
+  const { owed: billsOwed, paidSoFar: billsPaid } = billsStatus(paychecks, paid);
+
+  // BALANCE: the bank amount you typed into "Left from this check". It stays exactly
+  // as you typed it until you change it. The month is then:
+  //   bank + paychecks after the day you typed it − bills still owed
   const latestIndex = latestPaydayIndex(resolvedWeeks, today.getDate());
   const balance = parseMoney(state.leftNow).value;
-  const balanceIsCurrent =
-    balance !== null &&
-    (latestIndex === -1
-      ? state.leftNowWeek === "before"
-      : state.leftNowWeek === resolvedWeeks[latestIndex].key);
-  const fromBalance = balanceIsCurrent
-    ? monthFromBalance(resolvedWeeks, paychecks, latestIndex, paid, balance)
-    : null;
+  const fromBalance =
+    balance === null
+      ? null
+      : monthFromBalance(
+          resolvedWeeks,
+          state.leftNowDate ?? "",
+          balance,
+          billsOwed,
+        );
 
   const usesBalance = fromBalance !== null;
   const projectedRemaining = usesBalance ? fromBalance.remaining : planRemaining;
@@ -350,6 +354,8 @@ function calculateBudget(state, today) {
     balance: usesBalance ? balance : null,
     balanceDetail: fromBalance,
     latestIndex,
+    billsOwed,
+    billsPaid,
 
     requiredMonthlyIncome,
     minimumIncomePerPayPeriod,
@@ -393,40 +399,39 @@ function latestPaydayIndex(weeks, todayDay) {
   return index;
 }
 
-/* ---------------------------------------------------------------------
-   MONTH TOTAL FROM YOUR REAL BALANCE
-   balance = what's in your account right now (typed into "Left from this check").
-   It already includes this paycheck and everything earlier, so those aren't added again.
-     remaining = balance
-               − bills on this paycheck you haven't checked off
-               + each later paycheck
-               − each later paycheck's bills you haven't checked off
-   Before the month's first payday (latestIndex -1), every paycheck is still to come.
-   Bills marked "pay from other source" don't come out of this account.
-   --------------------------------------------------------------------- */
-function monthFromBalance(weeks, paychecks, latestIndex, paid, balance) {
-  const unpaid = (plan) =>
-    plan.items.reduce(
-      (sum, item) =>
-        sum +
-        (item.fromOther || paid[`${plan.key}|${item.id}`] ? 0 : item.amount),
-      0,
-    );
-  const dueNow = latestIndex >= 0 ? unpaid(paychecks[latestIndex]) : 0;
-  let incomeToCome = 0;
-  let billsToCome = 0;
-  for (let i = latestIndex + 1; i < paychecks.length; i++) {
-    incomeToCome += weeks[i].amountUsed;
-    billsToCome += unpaid(paychecks[i]);
+// This month's bills split into what you've checked off and what you still owe.
+// Bills marked "pay from other source" aren't owed from your pay, so they're in neither.
+function billsStatus(paychecks, paid) {
+  let owed = 0;
+  let paidSoFar = 0;
+  for (const plan of paychecks) {
+    for (const item of plan.items) {
+      if (item.fromOther) continue;
+      if (paid[`${plan.key}|${item.id}`]) paidSoFar += item.amount;
+      else owed += item.amount;
+    }
   }
+  const round = (n) => Math.round(n * 100) / 100;
+  return { owed: round(owed), paidSoFar: round(paidSoFar) };
+}
+
+/* ---------------------------------------------------------------------
+   MONTH TOTAL FROM YOUR BANK BALANCE
+   balance     = what you typed into "Left from this check". Never changes on its own.
+   balanceDate = the day you typed it. Paychecks after that day aren't in the bank
+                 yet, so they're added at your expected (or entered) amount.
+     remaining = balance + paychecks after balanceDate − bills still owed
+   --------------------------------------------------------------------- */
+function monthFromBalance(weeks, balanceDate, balance, billsOwed) {
+  const coming = weeks.filter((week) => week.key > balanceDate);
+  const incomeToCome = coming.reduce((sum, week) => sum + week.amountUsed, 0);
   const round = (n) => Math.round(n * 100) / 100;
   return {
     balance: round(balance),
-    dueNow: round(dueNow),
     incomeToCome: round(incomeToCome),
-    billsToCome: round(billsToCome),
-    paychecksToCome: Math.max(0, paychecks.length - latestIndex - 1),
-    remaining: round(balance - dueNow + incomeToCome - billsToCome),
+    paychecksToCome: coming.length,
+    billsOwed: round(billsOwed),
+    remaining: round(balance + incomeToCome - billsOwed),
   };
 }
 
@@ -653,5 +658,6 @@ if (typeof module !== "undefined") {
     spendingRoom,
     monthFromBalance,
     latestPaydayIndex,
+    billsStatus,
   };
 }

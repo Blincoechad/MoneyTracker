@@ -240,7 +240,7 @@
           <div class="kpi">
             <dt>
               <span class="kpi-op" aria-hidden="true">−</span>
-              Bills &amp; expenses
+              Bills left to pay
             </dt>
             <dd id="kpiExpenses">$0.00</dd>
             <p class="kpi-sub" id="kpiExpensesSub"></p>
@@ -248,93 +248,14 @@
           <div class="kpi kpi-split">
             <dt>Savings</dt>
             <dd>
-              <div class="kpi-part" data-savings-part="month">
-                <div class="kpi-part-head">
-                  <span class="kpi-part-label">Added this month</span>
-                  <button
-                    type="button"
-                    class="kpi-more"
-                    data-savings-menu="month"
-                    aria-label="Change added this month"
-                    aria-expanded="false"
-                    aria-controls="savingsEditMonth"
-                  >
-                    ⋯
-                  </button>
-                </div>
-                <span class="kpi-value" id="kpiSavings">$0.00</span>
-                <span class="kpi-sub" id="kpiSavingsSub"></span>
-                <form
-                  class="kpi-edit"
-                  id="savingsEditMonth"
-                  data-savings-form="month"
-                  hidden
-                >
-                  <div
-                    class="kpi-edit-modes"
-                    role="group"
-                    aria-label="What to do"
-                  >
-                    <button
-                      type="button"
-                      data-savings-mode="add"
-                      aria-pressed="true"
-                    >
-                      Add
-                    </button>
-                    <button
-                      type="button"
-                      data-savings-mode="remove"
-                      aria-pressed="false"
-                    >
-                      Take out
-                    </button>
-                    <button
-                      type="button"
-                      data-savings-mode="set"
-                      aria-pressed="false"
-                    >
-                      Set
-                    </button>
-                  </div>
-                  <div class="kpi-edit-row">
-                    <div class="money-input">
-                      <span aria-hidden="true">$</span>
-                      <input
-                        type="text"
-                        inputmode="decimal"
-                        autocomplete="off"
-                        id="savingsEditMonthAmount"
-                        aria-label="Amount"
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <button type="submit" class="button button-small">
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      class="button button-small button-quiet"
-                      data-savings-cancel
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  <p
-                    class="field-error"
-                    id="savingsEditMonthAmountError"
-                    role="alert"
-                  ></p>
-                </form>
-              </div>
               <div class="kpi-part" data-savings-part="total">
                 <div class="kpi-part-head">
-                  <span class="kpi-part-label">Total saved</span>
+                  <span class="kpi-part-label">In savings</span>
                   <button
                     type="button"
                     class="kpi-more"
                     data-savings-menu="total"
-                    aria-label="Change total saved"
+                    aria-label="Change your savings"
                     aria-expanded="false"
                     aria-controls="savingsEditTotal"
                   >
@@ -342,7 +263,7 @@
                   </button>
                 </div>
                 <span class="kpi-value" id="kpiSavedTotal">$0.00</span>
-                <span class="kpi-sub">All months added up</span>
+                <span class="kpi-sub">Stays the same until you change it</span>
                 <form
                   class="kpi-edit"
                   id="savingsEditTotal"
@@ -778,10 +699,11 @@
               periods left blank are assumed to have paid your usual amount.
             </li>
             <li>
-              The month counts bills only. Your savings goal is tracked
-              separately and never makes the month negative. Once you type
-              what you have into "Left from this check," the month is that
-              amount + paychecks still coming − bills not checked off yet.
+              The month counts bills only; savings never makes it negative.
+              Once you type what's in your bank into "Left from this check,"
+              the month is that amount + paychecks after the day you typed it
+              − bills you haven't checked off. Your bank and savings numbers
+              only change when you change them.
             </li>
             <li>
               Your budget is saved in this browser. If you sign in, it's also
