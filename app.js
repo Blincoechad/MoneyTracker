@@ -799,30 +799,9 @@ function renderCanSpend(r, state) {
   input.placeholder = Math.max(0, planHave).toFixed(2);
   renderSpendLog(state);
 
-  const next = r.weeks[week.index + 1];
-  const nextDate = next
-    ? new Date(`${next.key}T12:00:00`)
-    : new Date(
-        new Date(`${week.key}T12:00:00`).getTime() +
-          (r.payFrequency === "biweekly" ? 14 : 7) * 86_400_000,
-      );
-  const reasons = [];
-  if (room.dueNow > 0.005)
-    reasons.push(`${money(room.dueNow)} for this paycheck's unpaid bills`);
-  if (room.keepLater > 0.005)
-    reasons.push(
-      `${money(room.keepLater)} for ${weekLabel(r.weeks[room.shortIndex], new Date().getMonth(), r.payFrequency).name}, which runs short`,
-    );
-
   const short = room.canSpend < -0.005;
   $("kpiCanSpend").textContent = money(Math.max(0, room.canSpend));
   $("kpiCanSpend").className = `kpi-value ${short ? "text-bad" : "text-good"}`;
-  $("kpiCanSpendSub").textContent =
-    reasons.length === 0
-      ? `Nothing to hold back. It's all yours until ${shortDate(nextDate)}.`
-      : short
-        ? `You're ${money(-room.canSpend)} under what you need to keep: ${reasons.join(" + ")}.`
-        : `Keep ${money(room.keep)}: ${reasons.join(" + ")}.`;
 }
 
 function renderKpis(r, base) {
