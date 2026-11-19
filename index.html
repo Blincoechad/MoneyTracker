@@ -231,6 +231,30 @@
                   />
                 </div>
                 <p class="field-error" id="leftNow-error" role="alert"></p>
+                <!-- Spend: pick what it was for, type the amount; it comes off the box and goes in the month's PDF -->
+                <div class="spend-wrap">
+                  <button
+                    type="button"
+                    class="button button-small button-outline"
+                    id="spendButton"
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                    aria-controls="spendMenu"
+                  >
+                    Spend
+                  </button>
+                  <div class="bill-menu spend-menu" id="spendMenu" role="menu" hidden>
+                    <button type="button" role="menuitem" data-spend-category="Gas">Gas</button>
+                    <button type="button" role="menuitem" data-spend-category="Gas station">Gas station</button>
+                    <button type="button" role="menuitem" data-spend-category="Shopping">Shopping</button>
+                    <button type="button" role="menuitem" data-spend-category="Eating out">Eating out</button>
+                    <button type="button" role="menuitem" data-spend-category="Other">Other</button>
+                  </div>
+                </div>
+                <details class="spend-log" id="spendLog" hidden>
+                  <summary id="spendLogSummary">Spent this month</summary>
+                  <ul class="spend-list" id="spendList"></ul>
+                </details>
                 <span class="kpi-part-label kpi-left-label">Can spend</span>
                 <span class="kpi-value" id="kpiCanSpend">$0.00</span>
                 <span class="kpi-sub" id="kpiCanSpendSub"></span>
@@ -783,6 +807,31 @@
         </div>
       </footer>
     </div>
+
+    <!-- "How much was spent?" — opens after you pick a category from Spend -->
+    <dialog class="spend-dialog" id="spendDialog" aria-labelledby="spendDialogTitle">
+      <form id="spendForm" novalidate>
+        <p class="eyebrow" id="spendDialogCategory">Gas</p>
+        <h2 id="spendDialogTitle">How much was spent?</h2>
+        <div class="money-input">
+          <span aria-hidden="true">$</span>
+          <input
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            id="spendAmount"
+            placeholder="0.00"
+            aria-describedby="spendAmountError spendDialogHint"
+          />
+        </div>
+        <p class="field-error" id="spendAmountError" role="alert"></p>
+        <p class="hint" id="spendDialogHint"></p>
+        <div class="spend-dialog-actions">
+          <button type="button" class="button button-quiet" id="spendCancel">Cancel</button>
+          <button type="submit" class="button">Subtract</button>
+        </div>
+      </form>
+    </dialog>
 
     <script src="calc.js"></script>
     <script src="app.js"></script>

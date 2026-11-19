@@ -83,6 +83,7 @@ function createExampleState() {
     movedBills: {},
     leftNow: "",
     leftNowDate: "",
+    spending: [],
     outsideBalance: "",
     savedBefore: "",
     savingsAdjust: 0,
@@ -129,6 +130,7 @@ function createBlankState() {
     movedBills: {}, // "<bill id>": "<payday>" a once-a-month bill was moved to, this month only
     leftNow: "", // your bank amount, typed into "Left from this check"; stays until you change it
     leftNowDate: "", // the day you typed it: paychecks after this day are still to come
+    spending: [], // what you spent with the Spend button this month: { id, category, amount, date }
     outsideBalance: "", // side savings balance; this month's "other source" bills come off it
     savedBefore: "", // your savings: one number you set on the Savings card (⋯); never changes on its own
     savingsAdjust: 0, // older saves only: folded into savedBefore when loaded
@@ -337,6 +339,11 @@ function loadState() {
   } else {
     state.leftNow = typeof saved.leftNow === "string" ? saved.leftNow : "";
   }
+  state.spending = Array.isArray(saved.spending)
+    ? saved.spending.filter(
+        (item) => item && typeof item.amount === "number" && item.amount > 0,
+      )
+    : [];
   migrateAverageWeeks(state);
   migrateCheckedSavings(state);
   migrateOneSavingsNumber(state);
@@ -365,6 +372,7 @@ function closeMonthIfNeeded(state) {
       "A new month started. Last month's pay periods were saved to Monthly history and cleared. Your income, bills, and savings are unchanged.";
   }
   settleMonth(state);
+  state.spending = []; // last month's spending is in its report now
   state.actuals = {};
   state.paid = {};
   state.otherSource = {};
@@ -789,6 +797,7 @@ function renderCanSpend(r, state) {
     "",
   ).have;
   input.placeholder = Math.max(0, planHave).toFixed(2);
+  renderSpendLog(state);
 
   const next = r.weeks[week.index + 1];
   const nextDate = next
@@ -1510,6 +1519,7 @@ function buildMonthReport(monthKey, state) {
     ...(r.paidFromOther > 0
       ? [`  from other source: ${money(r.paidFromOther)}  (not from pay)`]
       : []),
+    `Spending:            ${money(spendingTotal(state.spending))}`,
     `Pay − bills:         ${signedMoney(r.planRemaining)}`,
     `Extra at month end:  ${signedMoney(r.projectedRemaining)}`,
     `Savings at month end: ${money(savingsAtEnd)}`,
@@ -1562,6 +1572,7 @@ function buildMonthReport(monthKey, state) {
           left: plan.left,
         };
       }),
+      spending: spendingReport(state.spending),
       planRemaining: r.planRemaining,
       // Extra at month end: from your bank amount when you'd entered one, otherwise pay − bills.
       leftover: r.projectedRemaining,
@@ -1678,6 +1689,7 @@ async function downloadReportPdf(report) {
   heading("Month at a glance");
   row("Made", pdfMoney(d.income));
   row("Bills & expenses", pdfMoney(-(d.billsTotal - d.paidFromOther)));
+  if (d.spending) row("Everyday spending", pdfMoney(-d.spending.total));
   totalRow("Extra at month end", pdfMoney(leftover), {
     color: leftover < -0.005 ? BAD : GOOD,
   });
@@ -1715,6 +1727,34 @@ async function downloadReportPdf(report) {
       bold: true,
     });
 
+  // 3b. Everyday spending from the Spend button: by category, then every purchase.
+  if (d.spending) {
+    heading("Everyday spending");
+    if (d.spending.entries.length === 0) row("Nothing recorded with Spend", pdfMoney(0));
+    d.spending.byCategory.forEach((group) =>
+      row(group.category, pdfMoney(group.total), {
+        note: `${group.count} time${group.count === 1 ? "" : "s"}${
+          d.income > 0
+            ? ` · ${Math.round((group.total / d.income) * 100)}% of what you made`
+            : ""
+        }`,
+      }),
+    );
+    if (d.spending.entries.length > 0) {
+      totalRow("Total spent", pdfMoney(d.spending.total));
+      y += 6;
+      doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(...MUTED);
+      room(18);
+      doc.text("EVERY PURCHASE", left, y);
+      y += 16;
+      d.spending.entries.forEach((entry) =>
+        row(`${entry.day}  ·  ${entry.category}`, pdfMoney(-entry.amount), {
+          indent: 14,
+        }),
+      );
+    }
+  }
+
   // 4. Paycheck by paycheck: what each check paid and what it left.
   if (d.weeks) {
     heading("Paycheck by paycheck");
@@ -1750,6 +1790,8 @@ async function downloadReportPdf(report) {
   row("Made", pdfMoney(d.income));
   row("Bills & expenses paid from pay", pdfMoney(-(d.billsTotal - d.paidFromOther)));
   totalRow("Pay minus bills", pdfMoney(d.planRemaining ?? d.remaining));
+  if (d.spending && d.spending.total > 0)
+    row("Everyday spending (came out of your bank amount)", pdfMoney(-d.spending.total));
   if (d.leftoverFrom === "bank" && d.bank) {
     y += 6;
     row("Bank balance you entered", pdfMoney(d.bank.balance));
@@ -2539,3 +2581,170 @@ const PAY_LINK_WAIT_MS = 6000; // offline, or sync never answers: save anyway
   window.budgetApp.cloudReady = save; // sync.js calls this once this device matches the cloud, or isn't syncing
   setTimeout(save, PAY_LINK_WAIT_MS);
 })();
+
+
+/* =====================================================================
+   SPEND — record what you spend out of "Left from this check"
+   ---------------------------------------------------------------------
+   Spend → pick a category → "How much was spent?" → Subtract.
+   The amount comes off the box (and so off the month total), and is
+   saved in state.spending so the month's PDF can show where it went.
+   Typing in the box directly still works, but isn't recorded.
+   ===================================================================== */
+
+function spendingTotal(spending) {
+  return Math.round(
+    (spending ?? []).reduce((sum, item) => sum + item.amount, 0) * 100,
+  ) / 100;
+}
+
+// For the PDF: totals by category (biggest first) and every purchase in date order.
+function spendingReport(spending) {
+  const list = spending ?? [];
+  const groups = {};
+  for (const item of list) {
+    groups[item.category] ??= { category: item.category, total: 0, count: 0 };
+    groups[item.category].total += item.amount;
+    groups[item.category].count += 1;
+  }
+  return {
+    total: spendingTotal(list),
+    byCategory: Object.values(groups)
+      .map((group) => ({ ...group, total: Math.round(group.total * 100) / 100 }))
+      .sort((a, b) => b.total - a.total),
+    entries: [...list]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((item) => ({
+        category: item.category,
+        amount: item.amount,
+        day: shortDate(new Date(`${item.date}T12:00:00`)),
+      })),
+  };
+}
+
+// What the box holds right now: what you typed, or the grey amount it shows when empty.
+function bankAmountNow(r, state) {
+  const typed = parseMoney(state.leftNow).value;
+  if (typed !== null) return typed;
+  const week = latestPaydayWeek(r.weeks) ?? r.weeks[0];
+  if (!week) return 0;
+  return Math.max(
+    0,
+    spendingRoom(r.weeks, r.paychecks, week.index, state.paid, "").have,
+  );
+}
+
+function renderSpendLog(state) {
+  const list = state.spending ?? [];
+  $("spendLog").hidden = list.length === 0;
+  if (list.length === 0) return;
+  $("spendLogSummary").textContent = `Spent this month: ${money(spendingTotal(list))}`;
+  $("spendList").innerHTML = [...list]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map(
+      (item) => `
+      <li>
+        <span class="spend-what">${escapeHtml(item.category)} <small>${shortDate(new Date(`${item.date}T12:00:00`))}</small></span>
+        <span class="spend-amount">${money(item.amount)}</span>
+        <button type="button" class="spend-undo" data-undo-spend="${escapeHtml(item.id)}"
+          aria-label="Undo ${escapeHtml(item.category)} ${money(item.amount)}, adds it back to the box">Undo</button>
+      </li>`,
+    )
+    .join("");
+}
+
+function setSpendMenu(open) {
+  $("spendMenu").hidden = !open;
+  $("spendButton").setAttribute("aria-expanded", String(open));
+  if (open) $("spendMenu").querySelector("button").focus();
+}
+
+function openSpendDialog(category) {
+  const dialog = $("spendDialog");
+  const r = calculate(activeState());
+  dialog.dataset.category = category;
+  $("spendDialogCategory").textContent = category;
+  $("spendAmount").value = "";
+  $("spendAmount").removeAttribute("aria-invalid");
+  $("spendAmountError").textContent = "";
+  $("spendDialogHint").textContent = `It comes off the ${money(bankAmountNow(r, activeState()))} in "Left from this check."`;
+  dialog.showModal();
+  $("spendAmount").focus();
+}
+
+$("spendButton").addEventListener("click", () =>
+  setSpendMenu($("spendMenu").hidden),
+);
+
+$("spendMenu").addEventListener("click", (event) => {
+  const choice = event.target.closest("[data-spend-category]");
+  if (!choice) return;
+  setSpendMenu(false);
+  openSpendDialog(choice.dataset.spendCategory);
+});
+
+// Close the menu on an outside tap or Escape.
+document.addEventListener("click", (event) => {
+  if ($("spendMenu").hidden) return;
+  if (!event.target.closest(".spend-wrap")) setSpendMenu(false);
+});
+$("spendMenu").addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    setSpendMenu(false);
+    $("spendButton").focus();
+  }
+});
+
+$("spendCancel").addEventListener("click", () => $("spendDialog").close());
+// Tapping the dimmed area outside the pop-up closes it too.
+$("spendDialog").addEventListener("click", (event) => {
+  if (event.target === $("spendDialog")) $("spendDialog").close();
+});
+$("spendDialog").addEventListener("close", () => $("spendButton").focus());
+
+$("spendForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = $("spendAmount");
+  const { value, error } = parseMoney(input.value);
+  const state = activeState();
+  const have = bankAmountNow(calculate(state), state);
+  const problem =
+    error ||
+    (value === null || value === 0
+      ? "Enter how much you spent, like 25 or 25.50"
+      : value > have + 0.005
+        ? `That's more than the ${money(have)} in the box. Update the box to what's in your bank first.`
+        : "");
+  if (problem) {
+    $("spendAmountError").textContent = problem;
+    input.setAttribute("aria-invalid", "true");
+    input.focus();
+    return;
+  }
+
+  // Input → Calculate → Update UI: lower the box, record the purchase, recalculate everything.
+  state.leftNow = String(Math.round((have - value) * 100) / 100);
+  if (!state.leftNowDate) state.leftNowDate = isoDate(new Date());
+  state.spending = [
+    ...(state.spending ?? []),
+    { id: newId(), category: $("spendDialog").dataset.category, amount: value, date: isoDate(new Date()) },
+  ];
+  if (!scenario) baseline.isExample = false;
+  $("spendDialog").close();
+  refresh();
+});
+
+// Undo puts the money back in the box and removes it from the record.
+$("spendList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-undo-spend]");
+  if (!button) return;
+  const state = activeState();
+  const item = state.spending.find((entry) => entry.id === button.dataset.undoSpend);
+  if (!item) return;
+  const have = parseMoney(state.leftNow).value;
+  if (have !== null)
+    state.leftNow = String(Math.round((have + item.amount) * 100) / 100);
+  state.spending = state.spending.filter((entry) => entry !== item);
+  refresh();
+  $("spendButton").focus();
+});

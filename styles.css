@@ -2749,3 +2749,113 @@ input[aria-invalid="true"] {
 :root[data-style="glass"] .credit {
   border-top: 2px dashed rgb(31 42 68 / 0.2);
 }
+
+/* =====================================================================
+   SPEND — button + category menu in "Left from this check", the amount
+   pop-up, and the list of what you've spent this month
+   ===================================================================== */
+.spend-wrap {
+  position: relative;
+  justify-self: start;
+}
+.spend-menu {
+  left: 0;
+  right: auto;
+  min-width: 180px;
+}
+.spend-log {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.spend-log summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent);
+}
+.spend-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.spend-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+.spend-list li:first-child {
+  border-top: 0;
+}
+.spend-what {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.spend-what small {
+  color: var(--muted);
+}
+.spend-amount {
+  font-family: var(--font-num, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.spend-undo {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-height: 32px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.spend-dialog {
+  width: min(92vw, 360px);
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.spend-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+.spend-dialog form {
+  display: grid;
+  gap: 10px;
+}
+.spend-dialog h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.spend-dialog .eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.spend-dialog .money-input input {
+  font-size: 1.3rem;
+}
+.spend-dialog .field-error:empty,
+.spend-dialog .hint:empty {
+  display: none;
+}
+.spend-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .kpi-left .spend-wrap,
+  .kpi-left .spend-log {
+    grid-column: 1 / -1;
+  }
+}
