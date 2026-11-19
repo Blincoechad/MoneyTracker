@@ -279,12 +279,12 @@ function calculateBudget(state, today) {
         .reduce((s, item) => s + item.amount, 0),
     0,
   );
-  const projectedRemaining =
-    projectedIncome - monthlyExpenses - monthlySavings + paidFromOther;
+  // Bills only: the savings goal is tracked on its own and never pushes the month negative.
+  // Whatever's left after bills is what you have available to save (or spend).
+  const projectedRemaining = projectedIncome - monthlyExpenses + paidFromOther;
 
   // --- Minimum income and buffer averaged across this month's pay periods ---
-  const requiredMonthlyIncome =
-    monthlyExpenses + monthlySavings - paidFromOther;
+  const requiredMonthlyIncome = monthlyExpenses - paidFromOther;
   const minimumIncomePerPayPeriod =
     resolvedWeeks.length > 0
       ? requiredMonthlyIncome / resolvedWeeks.length
@@ -386,6 +386,8 @@ function calculateBudget(state, today) {
    first paycheck, flagged so you know it's already due.
    A bill you mark "pay from other source" for a paycheck stays listed
    but doesn't come out of that paycheck (it's counted in fromOther).
+   The Savings line stays on the list so you can check it off, but it
+   doesn't count in a paycheck's "left" (the month is bills only).
    Everything adds up to the same totals as the summary, so the last
    paycheck's running total equals "projected remaining".
    --------------------------------------------------------------------- */
@@ -539,7 +541,8 @@ function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
         !item.isSavings && Boolean(otherSource[`${key}|${item.id}`]);
     });
     const out = items.reduce(
-      (sum, item) => sum + (item.fromOther ? 0 : item.amount),
+      (sum, item) =>
+        sum + (item.fromOther || item.isSavings ? 0 : item.amount),
       0,
     );
     const fromOther = items.reduce(
@@ -559,20 +562,31 @@ function planPaychecks(state, weeks, year, monthIndex, calendarWeeks) {
      - this paycheck's bills you haven't checked off yet
      - the deepest hole later paychecks fall into (a rent week that
        costs more than that week's pay has to be covered from now)
+   Savings isn't held back (the month is bills only), so "can spend" is
+   also what you're free to save.
    haveText is what you typed into "Left from this check"; when blank,
-   it's the paycheck minus the bills already checked off.
+   it's the paycheck minus everything already checked off (savings you
+   checked off has left your account, so it counts there).
    --------------------------------------------------------------------- */
 function spendingRoom(weeks, paychecks, weekIndex, paid, haveText) {
+  const isPaid = (plan, item) => Boolean(paid[`${plan.key}|${item.id}`]);
   const unpaid = (plan) =>
     plan.items.reduce(
       (sum, item) =>
         sum +
-        (item.fromOther || paid[`${plan.key}|${item.id}`] ? 0 : item.amount),
+        (item.fromOther || item.isSavings || isPaid(plan, item)
+          ? 0
+          : item.amount),
       0,
     );
 
-  const dueNow = unpaid(paychecks[weekIndex]);
-  const paidNow = paychecks[weekIndex].out - dueNow;
+  const plan = paychecks[weekIndex];
+  const dueNow = unpaid(plan);
+  const paidNow = plan.items.reduce(
+    (sum, item) =>
+      sum + (!item.fromOther && isPaid(plan, item) ? item.amount : 0),
+    0,
+  );
   const have =
     parseMoney(haveText).value ?? weeks[weekIndex].amountUsed - paidNow;
 

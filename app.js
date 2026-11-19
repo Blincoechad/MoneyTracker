@@ -687,7 +687,7 @@ function renderHero(r, base) {
     $("heroMessage").textContent =
       clean(r.projectedRemaining) === 0
         ? "You're projected to finish the month at exactly $0. Any dip in income will push it negative."
-        : `You're projected to finish the month ${money(r.projectedRemaining)} ahead after paying bills and saving.`;
+        : `You're projected to finish the month ${money(r.projectedRemaining)} ahead after paying bills.`;
   } else {
     let message = `You need approximately ${money(r.deficit)} more income this month to reach $0.`;
     if (r.openWeekCount > 0) {
@@ -1265,8 +1265,7 @@ function renderSettingsSummary(r, state) {
 
 function renderFlow(r) {
   const fromPay = r.monthlyExpenses - r.paidFromOther; // bills paid from other sources don't use this month's income
-  const outflow = fromPay + r.monthlySavings;
-  const scale = Math.max(r.projectedIncome, outflow);
+  const scale = Math.max(r.projectedIncome, fromPay);
   const track = $("flowTrack");
 
   if (scale <= 0) {
@@ -1276,10 +1275,7 @@ function renderFlow(r) {
   }
 
   const pct = (amount) => (Math.max(0, amount) / scale) * 100;
-  const segments = [
-    ["expenses", fromPay, "Expenses"],
-    ["savings", r.monthlySavings, "Savings"],
-  ];
+  const segments = [["expenses", fromPay, "Expenses"]];
   if (r.projectedRemaining > 0)
     segments.push(["remaining", r.projectedRemaining, "Remaining"]);
 
@@ -1290,7 +1286,7 @@ function renderFlow(r) {
     )
     .join("");
 
-  // When spending + saving is bigger than income, the bar runs past the income line.
+  // When bills are bigger than income, the bar runs past the income line.
   // We hatch that overhang in red: it's the shortfall.
   if (r.projectedRemaining < 0) {
     html += `<div class="flow-seg short" style="position:absolute;top:0;left:${pct(r.projectedIncome)}%;width:${pct(-r.projectedRemaining)}%" title="Shortfall: ${money(-r.projectedRemaining)}"></div>`;
@@ -1323,13 +1319,6 @@ function renderBreakdown(r) {
       r.paidFromOther > 0 ? "Expenses from pay" : "Expenses",
       `−${money(r.monthlyExpenses - r.paidFromOther)}`,
       `−${money(perPayPeriod(r.monthlyExpenses - r.paidFromOther))}`,
-      null,
-    ],
-    [
-      "savings",
-      "Savings",
-      `−${money(r.monthlySavings)}`,
-      `−${money(perPayPeriod(r.monthlySavings))}`,
       null,
     ],
     [
@@ -1387,20 +1376,20 @@ function renderExplanations(r, state) {
     <p><strong>Baseline:</strong> <span class="formula">${weekly} × ${r.weeks.length} paychecks = ${money(r.baselineMonthlyIncome)}</span></p>
     <p><strong>Projection:</strong> add up every paycheck, using your actual amount where you entered one and ${weekly} where you didn't.</p>
     <p class="formula">${weekParts.join(" + ") || "$0.00"} = ${money(r.projectedIncome)}</p>
-    <p>${r.payFrequency === "biweekly" ? "Paychecks follow the every-2-weeks schedule anchored to your selected payday date. Weekly bills are distributed across the weeks between paychecks; paycheck savings are subtracted from each paycheck." : "Each payday this month is one week, so 5-payday months show more income than 4-payday months. Weekly bills and paycheck savings are counted with each weekly payday."}</p>`;
+    <p>${r.payFrequency === "biweekly" ? "Paychecks follow the every-2-weeks schedule anchored to your selected payday date. Weekly bills are distributed across the weeks between paychecks." : "Each payday this month is one week, so 5-payday months show more income than 4-payday months. Weekly bills are counted with each weekly payday."} Savings isn't subtracted: the month counts bills only.</p>`;
 
   const divisor = `÷ ${r.weeks.length} ${r.payFrequency === "biweekly" ? "paychecks" : "weeks"}`;
   $("minimumExplain").innerHTML = `
     <p><strong>Average needed per ${period}</strong> (the whole month, not just what's left):</p>
-    <p class="formula">${money(r.monthlyExpenses)} expenses + ${money(r.monthlySavings)} savings${r.paidFromOther > 0 ? ` − ${money(r.paidFromOther)} from other source` : ""} = ${money(r.requiredMonthlyIncome)} needed per month</p>
+    <p class="formula">${money(r.monthlyExpenses)} expenses${r.paidFromOther > 0 ? ` − ${money(r.paidFromOther)} from other source` : ""} = ${money(r.requiredMonthlyIncome)} needed per month</p>
     <p class="formula">${money(r.requiredMonthlyIncome)} ${divisor} = ${money(r.minimumIncomePerPayPeriod)} per ${period}</p>
     <p>Buffer = usual ${period} − average needed per ${period}: <span class="formula">${weekly} − ${money(r.minimumIncomePerPayPeriod)} = ${signedMoney(r.payPeriodBuffer)}</span></p>`;
 
   const savingsAmount = parseMoney(state.savings.amount).value ?? 0;
   $("savingsExplain").textContent =
     state.savings.frequency === "weekly"
-      ? `${money(savingsAmount)} from each of this month's ${r.weeks.length} paychecks = ${money(r.monthlySavings)}. Subtracted from what's left, but not counted as an expense.`
-      : `${money(r.monthlySavings)} per month. Subtracted from what's left, but not counted as an expense.`;
+      ? `${money(savingsAmount)} from each of this month's ${r.weeks.length} paychecks = ${money(r.monthlySavings)}. A goal you track separately; it doesn't change the month's total.`
+      : `${money(r.monthlySavings)} per month. A goal you track separately; it doesn't change the month's total.`;
 }
 
 function renderBanners() {
